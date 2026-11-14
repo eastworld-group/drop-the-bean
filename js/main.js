@@ -19,7 +19,7 @@ let lastInput = 0;
 cv.addEventListener("pointerdown", e => {
   if (S.sound || S.music) audio();
   recordedMusic(true);
-  if (document.activeElement === nameInput) nameInput.blur();
+  if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();   // tapping the game closes the keyboard
   lastInput = time;
   press = { x: e.clientX, y: e.clientY, moved: false };
   if (overlay) return;
@@ -59,6 +59,8 @@ nameInput.addEventListener("input", () => {
   save();
 });
 nameInput.addEventListener("keydown", e => { if (e.key === "Enter") nameInput.blur(); });
+playerInput.addEventListener("input", () => { S.player = playerInput.value.trim().slice(0, 16); save(); codeBox.value = makeCode(); });
+playerInput.addEventListener("keydown", e => { if (e.key === "Enter") playerInput.blur(); });
 
 /* ---------- one step of time ---------- */
 function update(dt) {
@@ -105,21 +107,27 @@ function update(dt) {
 }
 
 /* ---------- one picture ---------- */
-let nameStyle = "";
+// Real text boxes sit on top of the canvas. Show each one only on its own screen.
+function placeBox(el, box) {
+  const style = box ? `display:block;left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px` : "display:none";
+  if (el.dataset.at !== style) { el.dataset.at = style; el.style.cssText = style; }
+}
 function render() {
   buttons = [];
   drawBackground();
   if (screen === "home") drawHome();
   else if (screen === "game") drawGame();
   else if (screen === "mycat") drawMyCat();
+  else if (screen === "backup") drawBackup();
   else drawShop();
   if (overlay && overlay.delay <= 0) drawOverlay();
   drawToast();
   if (fade > 0) { ctx.globalAlpha = fade * fade; ctx.fillStyle = theme().bg[0]; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
 
-  const show = screen === "mycat" && !overlay && nameBox;
-  const style = show ? `display:block;left:${nameBox.x}px;top:${nameBox.y}px;width:${nameBox.w}px;height:${nameBox.h}px` : "display:none";
-  if (style !== nameStyle) { nameStyle = style; nameInput.style.cssText = style; }
+  placeBox(nameInput, screen === "mycat" && !overlay && nameBox);
+  placeBox(playerInput, screen === "backup" && !overlay && playerBox);
+  placeBox(codeBox, screen === "backup" && !overlay && codeBoxAt);
+  placeBox(restoreBox, screen === "backup" && !overlay && restoreBoxAt);
 }
 
 let last = performance.now(), frameNo = 0, frameError = false;
@@ -143,6 +151,7 @@ nameInput.value = S.names[S.hero] || "";
 nameInput.placeholder = CATS[S.hero].name;
 resize();
 screen = S.setup ? "home" : "mycat";      // first visit: pick and name your cat
+if (S.setup && S.player) toast(t("welcome", S.player));
 layout();
 requestAnimationFrame(frame);
 

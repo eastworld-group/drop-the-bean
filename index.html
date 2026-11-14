@@ -30,11 +30,25 @@
     -webkit-user-select: text; user-select: text;
   }
   #nameInput::placeholder { color: #9AA3CC; }
+  /* Name and backup screen: your name, your code, and a box to paste a code into */
+  #playerInput, #codeBox, #restoreBox {
+    position: fixed; display: none; box-sizing: border-box; margin: 0;
+    border: 3px solid #8FB4E3; border-radius: 18px; outline: none;
+    background: #FFFFFF; color: #252A5C;
+    -webkit-user-select: text; user-select: text;
+  }
+  #playerInput { text-align: center; font: 800 20px ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif; }
+  #codeBox, #restoreBox { padding: 8px 12px; resize: none; overflow: auto; word-break: break-all; font: 16px/1.25 ui-monospace, Menlo, monospace; }
+  #playerInput:focus, #restoreBox:focus { border-color: #FF8A1F; }
+  #playerInput::placeholder, #restoreBox::placeholder { color: #9AA3CC; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <input id="nameInput" type="text" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="Your cat's name">
+<input id="playerInput" type="text" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Type your name" aria-label="Your name">
+<textarea id="codeBox" readonly spellcheck="false" aria-label="Your backup code"></textarea>
+<textarea id="restoreBox" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="BEAN-..." aria-label="Paste a backup code"></textarea>
 <script src="levels-data.js"></script>
 <script src="js/core.js"></script>
 <script src="js/art.js"></script>

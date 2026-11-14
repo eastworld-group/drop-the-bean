@@ -189,6 +189,59 @@ function drawMyCat() {
 }
 
 /* ==================================================================
+   NAME AND BACKUP: your name, and a code that carries your progress
+   to another phone. The three text boxes are real ones placed over
+   the canvas (see main.js), so the phone keyboard and paste work.
+=================================================================== */
+let playerBox = null, codeBoxAt = null, restoreBoxAt = null, restoreArmed = 0;
+function openBackup() {
+  go("backup");
+  playerInput.value = S.player || "";
+  codeBox.value = makeCode();
+  restoreBox.value = "";
+  restoreArmed = 0;
+}
+function copyCode() {
+  const code = makeCode();
+  codeBox.value = code;
+  const done = () => toast(t("copied"));
+  const oldWay = () => { codeBox.focus(); codeBox.select(); try { document.execCommand("copy"); } catch (e) { /* she can still long-press to copy */ } codeBox.blur(); done(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, oldWay); else oldWay();
+}
+function restoreFromCode() {
+  const got = readCode(restoreBox.value);
+  if (!got) { toast(t("bad_code")); sfx.no(); restoreArmed = 0; return; }
+  if (time - restoreArmed > 5 || !restoreArmed) { restoreArmed = time; toast(t("restore_sure")); return; }   // ask twice: this replaces what is here
+  S = got; save();
+  nameInput.value = S.names[S.hero] || ""; nameInput.placeholder = CATS[S.hero].name;
+  page = -1; restoreArmed = 0;
+  go("home");
+  toast(t("restored")); sfx.magic();
+}
+
+function drawBackup() {
+  roundButton(16, topY + 6, 44, "back", () => go("home"));
+  label(t("backup"), W / 2, topY + 28, 24, INK, 900);
+  const bw = Math.min(320, W - 40), x = (W - bw) / 2;
+  let y = topY + 74;
+  label(t("your_name"), W / 2, y, 14, INK, 800);
+  playerBox = { x, y: y + 12, w: bw, h: 42 };
+  y += 82;
+  label(t("your_code"), W / 2, y, 14, INK, 800);
+  codeBoxAt = { x, y: y + 12, w: bw, h: 70 };
+  y += 92;
+  pillButton(x, y, bw, 44, t("copy"), copyCode, true);
+  y += 66;
+  fitLabel(t("code_note"), W / 2, y, 12, bw, SOFT, 700);
+  fitLabel(t("code_note2"), W / 2, y + 16, 12, bw, SOFT, 700);
+  y += 46;
+  label(t("have_code"), W / 2, y, 14, INK, 800);
+  restoreBoxAt = { x, y: y + 12, w: bw, h: 70 };
+  y += 92;
+  pillButton(x, y, bw, 44, t("restore"), restoreFromCode, false, { fill: "#FFFFFF" });
+}
+
+/* ==================================================================
    SHOP: powerups for coins, boards for stars
 =================================================================== */
 const PU_ICON = { hint: ["bulb", "#F2A900"], snooze: ["clock", "#3B8BEF"], treat: ["fish", "#FF5C8A"] };
@@ -480,8 +533,8 @@ function drawPause() {
 function drawSettings() {
   buttons = [];
   ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
-  const cw = Math.min(330, W - 32), rowH = Math.min(52, (H - topY - 190) / 7);
-  const ch = 62 + 7 * rowH + 92;
+  const cw = Math.min(330, W - 32), rowH = Math.min(52, (H - topY - 190) / 8);
+  const ch = 62 + 8 * rowH + 92;
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
   label(t("settings"), W / 2, y + 36, 26, INK, 900);
@@ -498,9 +551,10 @@ function drawSettings() {
     S.theme = ok[(ok.indexOf(theme()) + 1) % ok.length].id; save();
   });
   row(6, t("s_meow", t("w_" + (S.meow || 0))), () => { S.meow = ((S.meow || 0) + 1) % MEOW_FILES.length; save(); meow(0, 1); });   // plays it, so you can hear each one
+  row(7, t("backup"), openBackup);
   const nextT = THEMES.find(th => totalStars() < th.stars);
-  fitLabel(nextT ? t("next_board", t("th_" + nextT.id), nextT.stars) : t("all_boards"), W / 2, y + 62 + 7 * rowH + 8, 13, cw - 30, SOFT, 700);
-  pillButton(x + 24, y + 62 + 7 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
+  fitLabel(nextT ? t("next_board", t("th_" + nextT.id), nextT.stars) : t("all_boards"), W / 2, y + 62 + 8 * rowH + 8, 13, cw - 30, SOFT, 700);
+  pillButton(x + 24, y + 62 + 8 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
 }
 
 function drawToast() {

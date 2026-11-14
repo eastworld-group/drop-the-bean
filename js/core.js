@@ -20,6 +20,9 @@ const easeOutBack = v => { const c = 1.70158; return 1 + (c + 1) * Math.pow(v - 
 const cv = document.getElementById("game");
 const ctx = cv.getContext("2d");
 const nameInput = document.getElementById("nameInput");
+const playerInput = document.getElementById("playerInput");
+const codeBox = document.getElementById("codeBox");
+const restoreBox = document.getElementById("restoreBox");
 let W = 0, H = 0, time = 0;
 
 const probe = document.createElement("div");
@@ -64,7 +67,7 @@ const SAVE_KEY = "dropthebean.save.v2";
 function freshSave() {
   return { stars: {}, coins: 60, pu: { hint: 3, snooze: 2, treat: 1 }, hero: "k", names: {}, hat: "", hats: [],
     theme: "sky", sound: true, music: true, track: 0, meow: 0, timer: true, shapes: false, calm: false,
-    daily: { last: "", streak: 0 }, setup: false };
+    daily: { last: "", streak: 0 }, setup: false, player: "" };
 }
 function loadSave() {
   const base = freshSave();
@@ -82,6 +85,56 @@ function loadSave() {
 }
 let S = loadSave();
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* play on without saving */ } }
+
+/* ---------- backup code ----------
+   Everything a player has earned, packed into one line of text that starts with
+   "BEAN-". Typing it into the game on another phone brings it all back.
+   Nothing is sent anywhere: the code is the save. */
+const b64 = bytes => btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64 = str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), ch => ch.charCodeAt(0));
+const codeSum = body => { let sum = 0; for (const ch of body) sum = (sum * 31 + ch.charCodeAt(0)) % 65536; return sum.toString(16).padStart(4, "0"); };
+
+function makeCode() {
+  let n = 0;
+  for (const k in S.stars) n = Math.max(n, Number(k) + 1);
+  const stars = new Uint8Array(Math.ceil(n / 4));                    // two bits per level
+  for (let i = 0; i < n; i++) stars[i >> 2] |= (S.stars[i] || 0) << ((i & 3) * 2);
+  const data = { v: 1, p: S.player || "", s: b64(stars), c: S.coins, u: [S.pu.hint, S.pu.snooze, S.pu.treat],
+    h: S.hero, n: S.names, t: S.hat, o: S.hats, th: S.theme, d: [S.daily.last, S.daily.streak],
+    x: [S.sound ? 1 : 0, S.music ? 1 : 0, S.track, S.meow || 0, S.timer ? 1 : 0, S.shapes ? 1 : 0, S.calm ? 1 : 0] };
+  const body = b64(new TextEncoder().encode(JSON.stringify(data)));
+  return "BEAN-" + body + "-" + codeSum(body);
+}
+
+// Returns a full save made from the code, or null if the code is damaged or not one of ours.
+function readCode(text) {
+  const m = /BEAN-([A-Za-z0-9_-]+)-([0-9a-f]{4})$/.exec(String(text).replace(/\s+/g, ""));
+  if (!m || codeSum(m[1]) !== m[2]) return null;
+  let d;
+  try { d = JSON.parse(new TextDecoder().decode(unb64(m[1]))); } catch (e) { return null; }
+  if (!d || d.v !== 1) return null;
+  const count = (v, max) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)));
+  const out = freshSave();
+  out.setup = true;
+  out.player = String(d.p || "").slice(0, 16);
+  try {
+    const stars = unb64(String(d.s || ""));
+    for (let i = 0; i < stars.length * 4 && i < LEVELS.length; i++) { const v = (stars[i >> 2] >> ((i & 3) * 2)) & 3; if (v) out.stars[i] = v; }
+  } catch (e) { return null; }
+  out.coins = count(d.c, 999999);
+  const u = Array.isArray(d.u) ? d.u : [];
+  out.pu = { hint: count(u[0], 999), snooze: count(u[1], 999), treat: count(u[2], 999) };
+  out.hero = CATS[d.h] ? d.h : "k";
+  for (const k in (d.n || {})) if (CATS[k] && typeof d.n[k] === "string") out.names[k] = d.n[k].slice(0, 12);
+  out.hats = (Array.isArray(d.o) ? d.o : []).filter(id => HATS.some(h => h.id === id));
+  out.hat = out.hats.includes(d.t) ? d.t : "";
+  out.theme = THEMES.some(th => th.id === d.th) ? d.th : "sky";
+  if (Array.isArray(d.d)) out.daily = { last: String(d.d[0] || ""), streak: count(d.d[1], 9999) };
+  const x = Array.isArray(d.x) ? d.x : [1, 1, 0, 0, 1, 0, 0];
+  out.sound = !!x[0]; out.music = !!x[1]; out.track = count(x[2], 7); out.meow = count(x[3], 5);
+  out.timer = !!x[4]; out.shapes = !!x[5]; out.calm = !!x[6];
+  return out;
+}
 
 const totalStars = () => Object.values(S.stars).reduce((a, b) => a + b, 0);
 const nextUnsolved = () => { for (let i = 0; i < LEVELS.length; i++) if (!S.stars[i]) return i; return 0; };
@@ -132,6 +185,11 @@ const WORDS = {
     bought: "Bought 1 {0}", need_coins: "You need {0} more coins", no_timer: "No timer in relaxed mode",
     pick_cat: "Pick your cat", name_cat: "Tap the name to change it", hats: "Hats", no_hat: "None", wear: "Wearing",
     hat_bow: "Bow", hat_cap: "Nightcap", hat_flower: "Flower", hat_party: "Party hat", hat_crown: "Crown",
+    backup: "Name and backup", your_name: "Your name", your_code: "Your backup code", copy: "Copy code",
+    copied: "Copied! Send it to yourself to keep it safe.", code_note: "It holds your stars, coins, cats and hats.",
+    code_note2: "Copy a fresh one now and then.", have_code: "New phone? Paste your code here", restore: "Restore",
+    restore_sure: "Tap Restore again to replace this phone's progress", bad_code: "That code doesn't look right",
+    restored: "Progress restored!", welcome: "Welcome back, {0}!",
     powerups: "Powerups", boards: "Boards", stars_need: "{0} stars", have: "You have {0}",
     th_sky: "Sky", th_sunset: "Sunset", th_garden: "Garden", th_dusk: "Dusk",
     c_nap: "Nap Time", c_rails: "On Rails", c_lock: "Lock and Key", c_blanket: "Blanket Fort",
