@@ -1,8 +1,8 @@
 // Keeps a copy of the game on the phone so it opens with no internet.
 // Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = "drop-the-bean-v4";
+const CACHE = "drop-the-bean-v5";
 const FILES = ["./", "index.html", "levels-data.js", "js/core.js", "js/art.js", "js/play.js", "js/screens.js", "js/main.js",
-  "manifest.webmanifest", "icon-180.png", "icon-512.png", "sounds/meow-soft.wav", "sounds/meow-kitten.wav", "sounds/meow-siamese.wav", "sounds/meow-house.wav", "sounds/meow-young.wav"];
+  "manifest.webmanifest", "icon-180.png", "icon-512.png", "sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav", "sounds/meow-siamese.wav", "sounds/meow-house.wav", "sounds/meow-young.wav"];
 // Music files are bigger. Each one is saved the first time it is played.
 const isMusic = url => /\.(m4a|mp3)$/.test(new URL(url).pathname);
 

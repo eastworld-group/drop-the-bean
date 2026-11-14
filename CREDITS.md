@@ -1,12 +1,14 @@
 # Credits
 
-All sounds below were released by their authors as CC0 (public domain dedication):
-free for any use, no credit required. They are credited here as a thank-you.
+All sounds below, except the first meow, were released by their authors as CC0
+(public domain dedication): free for any use, no credit required. They are credited
+here as a thank-you. The first meow was supplied by the game's owner.
 
 ## Meows
 
 | File in `sounds/` | Original | Author | Source |
 |---|---|---|---|
+| `meow-mrow.wav` | "catmrow", supplied by the game's owner | (owner's file) | not from a public library |
 | `meow-soft.wav` | cat_softmew, from "Cat Purr & Meow" | Kerzoven | https://opengameart.org/content/cat-purr-meow |
 | `meow-kitten.wav` | Kitten Mew (a person imitating a kitten) | AntumDeluge | https://opengameart.org/content/kitten-mew |
 | `meow-siamese.wav` | Meow of a Siamese cat | freemaster2 | https://commons.wikimedia.org/wiki/File:Meow_of_a_Siamese_cat_-_freemaster2.wav |
