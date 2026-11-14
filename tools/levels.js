@@ -19,7 +19,7 @@
 // only the interesting ones are kept. Chapters are ordered in waves:
 // harder, harder, peak, then a breather.
 //
-// Run:  node tools/levels.js 1      (makes chapter 1; same for 2 to 8)
+// Run:  node tools/levels.js 1      (makes chapter 1; same for 2 to 20)
 //       node tools/levels.js merge  (joins the chapters into levels-data.js)
 
 "use strict";
@@ -290,6 +290,20 @@ const SIZES_B = [
   T(8, 7, 6, 6, { walls: [2, 4], dMin: 20, dMax: 64, minRounds: 3, budget: 110 }),
   T(6, 8, 6, 6, { walls: [2, 6], dMin: 24, dMax: 76, minRounds: 4, budget: 140 }),
 ];
+// the biggest boards, for the last chapters
+const SIZES_C = [
+  T(4,  6, 6, 5, { walls: [0, 4], dMin: 18, dMax: 56, minRounds: 3, budget: 60 }),
+  T(7,  7, 6, 6, { walls: [2, 4], dMin: 22, dMax: 68, minRounds: 3, budget: 100 }),
+  T(10, 8, 6, 6, { walls: [2, 6], dMin: 26, dMax: 80, minRounds: 4, budget: 150 }),
+  T(4,  8, 6, 7, { walls: [2, 6], dMin: 26, dMax: 90, minRounds: 4, budget: 150 }),
+];
+// like C, but with more walls on the biggest boards so they stay tight puzzles
+const SIZES_D = [
+  T(5,  6, 6, 5, { walls: [0, 4], dMin: 18, dMax: 56, minRounds: 3, budget: 60 }),
+  T(10, 7, 6, 6, { walls: [2, 6], dMin: 20, dMax: 68, minRounds: 3, budget: 120 }),
+  T(8,  8, 6, 6, { walls: [6, 10], dMin: 22, dMax: 80, minRounds: 3, budget: 150 }),
+  T(2,  8, 6, 7, { walls: [4, 8], dMin: 24, dMax: 90, minRounds: 3, budget: 90 }),
+];
 const withExtra = (sizes, extra) => sizes.map(t => Object.assign({}, t, extra, t.beds <= 3 && extra.locks ? { locks: 1 } : {}));
 
 const CHAPTERS = {
@@ -306,6 +320,19 @@ const CHAPTERS = {
   6: { hint: "h_mix",     tiers: withExtra(SIZES_B, { rail: 0.35, locks: [1, 2] }) },
   7: { hint: "h_mix2",    tiers: withExtra(SIZES_B, { gates: [1, 2], locks: 1, blankets: 0.4 }) },
   8: { hint: "h_all",     tiers: withExtra(SIZES_B, { rail: 0.25, locks: 1, gates: [1, 2], blankets: 0.4 }) },
+  // chapters 9 to 20 remix the same twists on bigger and bigger boards
+  9:  { tiers: withExtra(SIZES_B, { rail: 0.4, blankets: 0.5 }) },
+  10: { tiers: withExtra(SIZES_B, { locks: [1, 2], gates: [1, 2] }) },
+  11: { tiers: withExtra(SIZES_B, { rail: 0.35, gates: [1, 2] }) },
+  12: { tiers: withExtra(SIZES_B, { blankets: 0.6, locks: [1, 2] }) },
+  13: { tiers: withExtra(SIZES_B, { rail: 0.3, locks: 1, blankets: 0.5 }) },
+  14: { tiers: withExtra(SIZES_B, { rail: 0.3, gates: [1, 2], blankets: 0.5 }) },
+  15: { tiers: withExtra(SIZES_D, {}) },
+  16: { tiers: withExtra(SIZES_C, { rail: 0.5 }) },
+  17: { tiers: withExtra(SIZES_C, { locks: [2, 3], gates: [1, 2] }) },
+  18: { tiers: withExtra(SIZES_D, { blankets: 0.8, gates: [1, 2] }) },
+  19: { tiers: withExtra(SIZES_C, { rail: 0.25, locks: [1, 2], gates: [1, 2], blankets: 0.5 }) },
+  20: { tiers: withExtra(SIZES_C, { rail: 0.3, locks: [1, 2], gates: [2, 3], blankets: 0.6 }) },
 };
 const CHAPTER_COUNT = Object.keys(CHAPTERS).length;
 
@@ -393,11 +420,28 @@ if (require.main === module) {
       levels.map(l => " " + JSON.stringify(l)).join(",\n") + "\n];\n");
     fs.writeFileSync(path.join(__dirname, "solutions.json"), JSON.stringify(solutions));
     process.stderr.write(`wrote ${levels.length} levels\n`);
+  } else if (arg === "topup" && CHAPTERS[process.argv[3]]) {
+    // A chapter came out short: add levels (second board size) just before its finale.
+    const num = Number(process.argv[3]), file = path.join(__dirname, `chapter-${num}.json`);
+    const ch = JSON.parse(fs.readFileSync(file, "utf8")), t = CHAPTERS[num].tiers[1];
+    seed = 99991 * num;
+    while (ch.levels.length < 25) {
+      const lv = randomLevel(t);
+      if (!lv) continue;
+      const r = solve(lv);
+      if (r.d < t.dMin || r.d > t.dMax) continue;
+      const th = thinking(lv);
+      if (th.rounds < t.minRounds && !th.tricky) continue;
+      ch.levels.splice(ch.levels.length - 1, 0, { ...lv, time: timeFor(r.d, r.switches), best: r.d });
+      ch.solutions.splice(ch.solutions.length - 1, 0, r.path);
+      process.stderr.write(`chapter ${num}: added a level (slides=${r.d})\n`);
+    }
+    fs.writeFileSync(file, JSON.stringify(ch));
   } else if (CHAPTERS[arg]) {
     fs.writeFileSync(path.join(__dirname, `chapter-${arg}.json`), JSON.stringify(buildChapter(Number(arg))));
     process.stderr.write(`chapter ${arg} done\n`);
   } else {
-    process.stderr.write("usage: node tools/levels.js 1..8 | merge\n");
+    process.stderr.write("usage: node tools/levels.js 1..20 | merge\n");
   }
 }
 module.exports = { solve, prepare, startState, occupancy, slide, DIRS, SHAPES };
