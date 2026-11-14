@@ -18,6 +18,7 @@ document.addEventListener("contextmenu", e => e.preventDefault());
 let lastInput = 0;
 cv.addEventListener("pointerdown", e => {
   if (S.sound || S.music) audio();
+  recordedMusic(true);
   if (document.activeElement === nameInput) nameInput.blur();
   lastInput = time;
   press = { x: e.clientX, y: e.clientY, moved: false };

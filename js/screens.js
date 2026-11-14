@@ -66,6 +66,32 @@ function drawHome() {
   pillButton(16 + (nw + 8) * 2, ny, nw, 46, t("settings"), () => { overlay = { kind: "settings", t: 1, delay: 0 }; }, false, { fill: "#FFFFFF" });
 }
 
+// Each level is a little cat bed. Finished levels have a cat asleep in them;
+// your own cat sits awake in the next one.
+function levelBed(x, y, s, n, stars, isNext, pressed) {
+  const rim = stars ? "#D9920C" : isNext ? "#B9590A" : "#6F93C9";
+  const cushionCol = stars ? "#FFD86B" : isNext ? "#FF8A1F" : "#A9C7F0";
+  const inner = stars ? "#FFF4CC" : isNext ? "#FFE3B8" : "#FFFFFF";
+  if (!pressed) { rr(x, y + 4, s, s, s * 0.3); ctx.fillStyle = "rgba(20, 28, 90, 0.25)"; ctx.fill(); }
+  rr(x, y, s, s, s * 0.3); ctx.fillStyle = rim; ctx.fill();
+  rr(x + 3, y + 3, s - 6, s - 6, s * 0.26); ctx.fillStyle = cushionCol; ctx.fill();
+  rr(x + s * 0.15, y + s * 0.15, s * 0.7, s * 0.7, s * 0.2); ctx.fillStyle = inner; ctx.fill();
+  const text = String(n + 1);
+  if (!stars && !isNext) {                                  // an empty bed, waiting
+    ctx.globalAlpha = 0.5; ctx.fillStyle = cushionCol; paw(x + s / 2, y + s * 0.3, s * 0.14); ctx.globalAlpha = 1;
+    label(text, x + s / 2, y + s * 0.6, Math.round(s * (text.length > 2 ? 0.27 : 0.32)), INK);
+    return;
+  }
+  if (isNext && !stars) drawCat(x + s / 2, y + s * 0.5, s * 0.66, S.hero, { seed: 2, wake: 1, hat: S.hat, noShadow: true });
+  else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true });
+  // number tag
+  const tw = s * (text.length > 2 ? 0.5 : text.length > 1 ? 0.42 : 0.34), th = s * 0.3;
+  rr(x - 2, y - 2, tw, th, th / 2); ctx.fillStyle = rim; ctx.fill();
+  rr(x, y, tw - 4, th - 4, th / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+  label(text, x + tw / 2 - 2, y + th / 2 - 1.5, Math.round(s * 0.2), INK);
+  if (stars) for (let k = 0; k < 3; k++) drawStar(x + s / 2 + (k - 1) * s * 0.22, y + s * 0.86, s * 0.095, k < stars);
+}
+
 function drawLevels(next) {
   const s = safeArea(), TH = theme();
   const pages = Math.ceil(LEVELS.length / CHAPTER_SIZE);
@@ -90,13 +116,8 @@ function drawLevels(next) {
     const n = page * CHAPTER_SIZE + i;
     if (n >= LEVELS.length) break;
     const bx = x0 + (i % colsN) * (bs + gap), by = top + Math.floor(i / colsN) * (bs + gap);
-    const stars = S.stars[n] || 0, isNext = n === next;
     const down = pressedIn(bx, by, bs, bs) ? 4 : 0;
-    if (!down) { rr(bx, by + 4, bs, bs, 16); ctx.fillStyle = stars ? "#E0A419" : isNext ? "#D4620A" : "#8FB4E3"; ctx.fill(); }
-    rr(bx, by + down, bs, bs, 16); ctx.fillStyle = stars ? "#FFF0B3" : isNext ? "#FF8A1F" : "#FFFFFF"; ctx.fill();
-    label(String(n + 1), bx + bs / 2, by + down + bs * (stars ? 0.4 : 0.52), Math.round(bs * (n >= 99 ? 0.3 : 0.36)), isNext && !stars ? "#FFFFFF" : INK);
-    if (stars) for (let k = 0; k < 3; k++) drawStar(bx + bs / 2 + (k - 1) * bs * 0.24, by + down + bs * 0.76, bs * 0.1, k < stars);
-    if (isNext) drawCat(bx + bs - 6, by + down + 4, bs * 0.62, S.hero, { seed: 2, wake: 1, hat: S.hat, noShadow: true });   // your cat waits on the next level
+    levelBed(bx, by + down, bs, n, S.stars[n] || 0, n === next, !!down);
     buttons.push({ x: bx, y: by, w: bs, h: bs + 4, onTap: () => startLevel(n) });
   }
 }
@@ -109,7 +130,7 @@ function pickCat(k) {
   S.hero = k; save();
   nameInput.value = S.names[k] || "";
   nameInput.placeholder = CATS[k].name;
-  sfx.meow();
+  sfx.meow(0, VOICE[k]);
 }
 function pickHat(id) {
   if (!id || S.hats.includes(id)) { S.hat = id; save(); sfx.tap(); return; }
@@ -458,8 +479,8 @@ function drawPause() {
 function drawSettings() {
   buttons = [];
   ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
-  const cw = Math.min(330, W - 32), rowH = Math.min(54, (H - topY - 190) / 6);
-  const ch = 62 + 6 * rowH + 92;
+  const cw = Math.min(330, W - 32), rowH = Math.min(52, (H - topY - 190) / 7);
+  const ch = 62 + 7 * rowH + 92;
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
   label(t("settings"), W / 2, y + 36, 26, INK, 900);
@@ -475,9 +496,10 @@ function drawSettings() {
     const ok = THEMES.filter(th => totalStars() >= th.stars);
     S.theme = ok[(ok.indexOf(theme()) + 1) % ok.length].id; save();
   });
+  row(6, t("s_meow", t("w_" + (S.meow || 0))), () => { S.meow = ((S.meow || 0) + 1) % MEOW_FILES.length; save(); meow(0, 1); });   // plays it, so you can hear each one
   const nextT = THEMES.find(th => totalStars() < th.stars);
-  fitLabel(nextT ? t("next_board", t("th_" + nextT.id), nextT.stars) : t("all_boards"), W / 2, y + 62 + 6 * rowH + 8, 13, cw - 30, SOFT, 700);
-  pillButton(x + 24, y + 62 + 6 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
+  fitLabel(nextT ? t("next_board", t("th_" + nextT.id), nextT.stars) : t("all_boards"), W / 2, y + 62 + 7 * rowH + 8, 13, cw - 30, SOFT, 700);
+  pillButton(x + 24, y + 62 + 7 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
 }
 
 function drawToast() {

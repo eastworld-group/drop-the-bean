@@ -163,7 +163,7 @@ function completeBed(bed) {
   leaving.push(bed);
   if (drag && drag.bed === bed) drag = null;
   burst(gx + (bed.c + 0.5) * cell, gy + (bed.r + 0.5) * cell, "heart", "#FF5C8A", 5);
-  sfx.done();
+  sfx.done(VOICE[skin(bed.color)]);                       // every full bed gets a meow, in that cat's own voice
   let opened = false;
   for (const b of beds) if (b.lock === bed.id) {            // this bed was a key: its lock pops open
     burst(gx + (b.c + 0.5) * cell, gy + (b.r + 0.5) * cell, "spark", pairOf(b.id)[0], 12);
@@ -332,7 +332,7 @@ function useTreat() {
   timerOn = true; touched = true;
   cat.hidden = false;
   tuck(bed, r, c);
-  sfx.magic(); sfx.meow(0.15);
+  sfx.magic(); sfx.meow(0.15, VOICE[skin(cat.color)]);
   if (hinting) { hinting = false; guideRuns = []; }
   if (bed.need === 0) completeBed(bed);
   if (catsLeft === 0 && !overlay) finish("win", LEAVE + 0.1);

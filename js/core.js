@@ -6,7 +6,8 @@
 
 const LEVELS = window.LEVELS || [];
 const CHAPTER_SIZE = 25;
-const CHAPTER_KEYS = ["c_nap", "c_rails", "c_lock", "c_blanket", "c_gate", "c_house", "c_maze", "c_dream"];
+const CHAPTER_KEYS = ["c_nap", "c_rails", "c_lock", "c_blanket", "c_gate", "c_house", "c_maze", "c_dream",
+  "c_9", "c_10", "c_11", "c_12", "c_13", "c_14", "c_15", "c_16", "c_17", "c_18", "c_19", "c_20"];
 const INK = "#252A5C";
 const SOFT = "#5F6AA6";
 const FONT = 'ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif';
@@ -49,7 +50,7 @@ const HATS = [
 const POWERUPS = [
   { id: "hint", price: 30 }, { id: "snooze", price: 25 }, { id: "treat", price: 45 },
 ];
-const PAIR = [["#FFC93C", "#8A5A00"], ["#FF7EB6", "#A02567"]];     // lock-and-key pair colors
+const PAIR = [["#FFC93C", "#8A5A00"], ["#FF7EB6", "#A02567"], ["#5FE0C0", "#1E7A62"]];     // lock-and-key pair colors
 // Boards are a reward for stars.
 const THEMES = [
   { id: "sky",    stars: 0,   bg: ["#A9DCFF", "#E3F4FF"], tray: "#4A5BC4", trayDark: "#2B3783", wall: "#6577DC", wallDark: "#35449E", tiles: ["#F4F7FF", "#E5EBFC"] },
@@ -62,7 +63,7 @@ const THEMES = [
 const SAVE_KEY = "dropthebean.save.v2";
 function freshSave() {
   return { stars: {}, coins: 60, pu: { hint: 3, snooze: 2, treat: 1 }, hero: "k", names: {}, hat: "", hats: [],
-    theme: "sky", sound: true, music: true, track: 0, timer: true, shapes: false, calm: false,
+    theme: "sky", sound: true, music: true, track: 0, meow: 0, timer: true, shapes: false, calm: false,
     daily: { last: "", streak: 0 }, setup: false };
 }
 function loadSave() {
@@ -122,7 +123,8 @@ const WORDS = {
     next: "Next level", again: "Play again", retry: "Try again", home: "Home", resume: "Resume", restart: "Restart",
     done: "Done", back: "Back", start: "Start playing",
     need_bed: "{0} cats still need a bed.", need_bed1: "1 cat still needs a bed.", use_snooze: "Snooze: 30 more seconds",
-    s_sound: "Sound: {0}", s_music: "Music: {0}", m_0: "Lullaby", m_1: "Sunny Window", m_2: "Tiptoe", m_3: "Dreamy", m_4: "Zoomies", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
+    s_sound: "Sound: {0}", s_music: "Music: {0}", m_0: "Lullaby", m_1: "Sunny Window", m_2: "Tiptoe", m_3: "Dreamy", m_4: "Zoomies", m_5: "Hot Springs Town", m_6: "Happy Adventure", m_7: "Flowerbed Fields",
+    s_meow: "Meow: {0}", w_0: "Siamese", w_1: "House cat", w_2: "Young cat", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
     s_shapes: "Color shapes: {0}", s_calm: "Calm motion: {0}", s_board: "Board: {0}", on: "On", off: "Off",
     next_board: "Next board, {0}, at {1} stars", all_boards: "All boards unlocked",
     pu_hint: "Hint", pu_snooze: "Snooze", pu_treat: "Treat",
@@ -134,6 +136,9 @@ const WORDS = {
     th_sky: "Sky", th_sunset: "Sunset", th_garden: "Garden", th_dusk: "Dusk",
     c_nap: "Nap Time", c_rails: "On Rails", c_lock: "Lock and Key", c_blanket: "Blanket Fort",
     c_gate: "Baby Gates", c_house: "Full House", c_maze: "Pillow Maze", c_dream: "Dream Team",
+    c_9: "Night Train", c_10: "Safe and Sound", c_11: "Side Tracks", c_12: "Hide and Sleep",
+    c_13: "Pajama Party", c_14: "Midnight Snack", c_15: "Deep Sleep", c_16: "Rail Yard",
+    c_17: "Under Lock and Key", c_18: "Pillow Fort", c_19: "Full Moon", c_20: "Sweet Dreams",
     b_k: "Naps anywhere. Even on your keyboard.", b_g: "Chirps at birds. Has never caught one.",
     b_o: "Thinks every box is a gift for him.", b_b: "Loves the rain. From indoors.",
     b_w: "Soft as butter. Steals your pillow.", b_p: "Wobbles when she runs. Runs a lot.",
@@ -164,13 +169,14 @@ function audio() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
     try { actx = new AC(); } catch (e) { return null; }
+    loadMeows();
   }
   // An iPhone pauses audio when you leave the game ("suspended" or "interrupted").
   // Wake it again on the next touch, whatever the paused state is called.
   if (actx.state !== "running") { try { const p = actx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* try again next touch */ } }
   return actx;
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && actx && (S.sound || S.music)) audio(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && actx && (S.sound || S.music)) audio(); recordedMusic(false); });
 
 function tone(freq, dur, o) {
   o = o || {};
@@ -186,16 +192,68 @@ function tone(freq, dur, o) {
   osc.connect(g); g.connect(a.destination);
   osc.start(t0); osc.stop(t0 + dur + 0.03);
 }
+// Each cat has its own voice: higher or lower.
+const VOICE = { k: 1.0, g: 1.18, o: 0.86, b: 0.95, w: 1.3, p: 1.42, m: 1.1 };
+
+// A meow, built from scratch: a buzzy note that rises ("me") then falls ("ow"),
+// pushed through a filter that slides from a bright "e" sound to a round "o" sound.
+// Three real cat recordings to choose from in Settings (see CREDITS.md).
+const MEOW_FILES = ["sounds/meow-1.wav", "sounds/meow-2.wav", "sounds/meow-3.wav"];
+const meowBuffers = [];
+function loadMeows() {
+  MEOW_FILES.forEach((url, i) => {
+    fetch(url).then(r => r.arrayBuffer())
+      .then(data => actx.decodeAudioData(data, buf => { meowBuffers[i] = buf; }, () => {}))
+      .catch(() => { /* no recording: the built-in meow below is used */ });
+  });
+}
+
+function meow(delay, pitch) {
+  if (!S.sound) return;
+  const a = audio(); if (!a || a.state !== "running") return;
+  const rec = meowBuffers[S.meow];
+  if (rec) {                                       // the real recording, a little higher or lower for each cat
+    const src = a.createBufferSource(), g = a.createGain();
+    src.buffer = rec;
+    src.playbackRate.value = 0.88 + ((pitch || 1) - 0.86) * 0.55;
+    g.gain.value = 0.75;
+    src.connect(g); g.connect(a.destination);
+    src.start(a.currentTime + (delay || 0));
+    return;
+  }
+  const t0 = a.currentTime + (delay || 0), dur = 0.5 + Math.random() * 0.12;
+  const f0 = 540 * (pitch || 1) * (0.97 + Math.random() * 0.06);
+  const osc = a.createOscillator(); osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(f0 * 0.72, t0);
+  osc.frequency.linearRampToValueAtTime(f0 * 1.28, t0 + 0.13);
+  osc.frequency.linearRampToValueAtTime(f0 * 1.08, t0 + 0.3);
+  osc.frequency.linearRampToValueAtTime(f0 * 0.6, t0 + dur);
+  const mouth = a.createBiquadFilter(); mouth.type = "bandpass"; mouth.Q.value = 3.2;
+  mouth.frequency.setValueAtTime(2400, t0);
+  mouth.frequency.linearRampToValueAtTime(1500, t0 + 0.2);
+  mouth.frequency.linearRampToValueAtTime(780, t0 + dur);
+  const body = a.createBiquadFilter(); body.type = "lowpass"; body.frequency.value = 1000;
+  const g = a.createGain(), g2 = a.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.55, t0 + 0.07);
+  g.gain.setValueAtTime(0.55, t0 + 0.28);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  g2.gain.setValueAtTime(0.0001, t0);
+  g2.gain.exponentialRampToValueAtTime(0.07, t0 + 0.07);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(mouth); mouth.connect(g); g.connect(a.destination);
+  osc.connect(body); body.connect(g2); g2.connect(a.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+
 let lastBump = 0;
 const sfx = {
   slide:  () => tone(320, 0.04, { type: "triangle", vol: 0.05 }),
   tuck:   () => { tone(520, 0.13, { to: 900, vol: 0.15 }); tone(780, 0.1, { to: 1350, vol: 0.05, delay: 0.03 }); },
-  done:   () => { [659, 831, 988].forEach((f, i) => tone(f, 0.26, { vol: 0.08, delay: i * 0.06, type: "triangle" })); sfx.meow(0.12); },
+  // a bed is full: a soft chime, then that cat's own meow
+  done:   pitch => { [659, 831, 988].forEach((f, i) => tone(f, 0.22, { vol: 0.05, delay: i * 0.05, type: "triangle" })); meow(0.1, pitch); },
   purr:   () => { for (let i = 0; i < 12; i++) tone(52 + (i % 2) * 6, 0.05, { type: "sawtooth", vol: 0.045, delay: 0.15 + i * 0.045 }); },
-  // "me-ow": a quick rise, then a longer fall, with a thin raspy layer on top
-  meow:   d => { d = d || 0; const hi = 950 + Math.random() * 260;
-    tone(620, 0.1, { to: hi, vol: 0.13, delay: d }); tone(hi, 0.34, { to: 520, vol: 0.13, delay: d + 0.09 });
-    tone(1240, 0.1, { to: hi * 2, vol: 0.022, type: "sawtooth", delay: d }); tone(hi * 2, 0.3, { to: 1040, vol: 0.022, type: "sawtooth", delay: d + 0.09 }); },
+  meow:   (d, pitch) => meow(d, pitch),
   win:    () => { [523, 659, 784, 1047].forEach((f, i) => { tone(f, 0.26, { vol: 0.14, delay: 0.1 + i * 0.11, type: "triangle" }); tone(f * 1.5, 0.2, { vol: 0.04, delay: 0.1 + i * 0.11 }); }); },
   lose:   () => [392, 330, 262].forEach((f, i) => tone(f, 0.3, { vol: 0.13, delay: i * 0.16, type: "triangle" })),
   bump:   () => { if (time - lastBump > 0.25) { lastBump = time; tone(120, 0.07, { type: "square", vol: 0.04 }); } },
@@ -229,8 +287,31 @@ const SONGS = [
     bass: [98, 98, 110, 110, 87.3, 87.3, 98, 98] },
 ];
 let songAt = 0, songStep = 0, songId = -1;
+// Tracks 6 to 8 are recordings (see CREDITS.md). They play through a normal
+// audio player, which is the most reliable way on an iPhone.
+const TRACK_FILES = [null, null, null, null, null,
+  "sounds/music-hot-springs.m4a", "sounds/music-happy-adventure.m4a", "sounds/music-flowerbed-fields.m4a"];
+const players = {};
+let playingTrack = -1;
+// Start, switch or stop the recorded track so it matches the setting.
+// A phone only lets sound start from a touch, so starting waits for one.
+function recordedMusic(fromTouch) {
+  const want = S.music && TRACK_FILES[S.track] && !document.hidden ? S.track : -1;
+  if (playingTrack !== -1 && playingTrack !== want) { players[playingTrack].pause(); playingTrack = -1; }
+  if (want === -1) return;
+  let el = players[want];
+  if (!el) {
+    if (!fromTouch) return;
+    el = players[want] = new Audio(TRACK_FILES[want]);
+    el.loop = true; el.preload = "auto";
+  }
+  if (el.paused && fromTouch) { const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); }
+  if (!el.paused || fromTouch) playingTrack = want;
+}
+
 function musicTick() {
-  if (!S.music || !actx || actx.state !== "running") return;
+  recordedMusic(false);
+  if (!S.music || TRACK_FILES[S.track] || !actx || actx.state !== "running") return;
   const id = SONGS[S.track] ? S.track : 0;
   if (id !== songId) { songId = id; songStep = 0; }
   const song = SONGS[id];
@@ -249,8 +330,9 @@ function musicTick() {
 // The music switch in menus steps through: Off, then each of the five tracks.
 function cycleMusic() {
   if (!S.music) { S.music = true; S.track = 0; }
-  else if (S.track < SONGS.length - 1) S.track++;
+  else if (S.track < TRACK_FILES.length - 1) S.track++;
   else S.music = false;
   save(); if (S.music) audio();
+  recordedMusic(true);
 }
 const musicLabel = () => t("s_music", S.music ? t("m_" + S.track) : t("off"));
