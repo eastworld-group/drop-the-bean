@@ -7,15 +7,20 @@
 //    or move onto a cat of a different color.
 //  - Moving onto cats of its own color tucks them in. When it needs
 //    no more cats, the bed leaves the board.
+//  - Each color has exactly one bed per level.
 //  - Rail beds ("axis") only slide side to side ("h") or up and down ("v").
 //  - A locked bed ("lock": id of its key bed) can't move until the key bed is full.
-//  - The level is solved when every cat is tucked in.
-//  - Each color has exactly one bed per level.
+//  - A gate ([r, c, color]) fences in one cat. No bed may enter that cell
+//    until the bed of the gate's color is full.
+//  - Blankets ([r, c]) only hide a cat's color from the player. Rules don't change.
 //
-// Every level written by this file has been solved by the computer first.
+// Levels are not just "solvable". Each candidate is scored for how much
+// thinking it needs (how many beds must wait for another bed first), and
+// only the interesting ones are kept. Chapters are ordered in waves:
+// harder, harder, peak, then a breather.
 //
-// Run:  node tools/levels.js 1     (makes chapter 1; same for 2, 3, 4)
-//       node tools/levels.js merge (joins the four chapters into levels-data.js)
+// Run:  node tools/levels.js 1      (makes chapter 1; same for 2 to 8)
+//       node tools/levels.js merge  (joins the chapters into levels-data.js)
 
 "use strict";
 const fs = require("fs");
@@ -36,101 +41,165 @@ const SHAPES = {
 const SMALL = ["dot", "i2h", "i2v", "i2h", "i2v", "i3h", "i3v", "l3a", "l3b", "l3c", "l3d"];
 const ALL = Object.keys(SHAPES).concat(["i2h", "i2v", "i3h", "i3v"]);
 const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-const COLOR_ORDER = ["k", "o", "b", "w", "p", "m"];   // k is Bean, the star: in every level
+// k = Bean (black and white), g = Meowsy (grey and white tabby): the two stars come first,
+// so they are in almost every level. Then Pinto, Navy, Butter, Jelly, Eda.
+const COLOR_ORDER = ["k", "g", "o", "b", "w", "p", "m"];
+
+/* ---------- shared rule engine ---------- */
+function prepare(level) {
+  const { rows, cols } = level;
+  const colors = level.beds.map(b => b.color);
+  const gate = new Int8Array(rows * cols).fill(-1);
+  for (const [r, c, color] of level.gates || []) gate[r * cols + c] = colors.indexOf(color);
+  return {
+    rows, cols, N: rows * cols, colors, gate,
+    shapes: level.beds.map(b => b.cells),
+    axis: level.beds.map(b => b.axis || ""),
+    lock: level.beds.map(b => b.lock === undefined ? -1 : b.lock),
+  };
+}
+const startState = level => ({
+  pos: level.beds.map(b => b.r * level.cols + b.c),
+  need: level.beds.map(b => b.need),
+  cats: level.map.join(""),
+});
+const keyOf = s => s.pos.join(",") + "/" + s.need.join("") + "/" + s.cats;
+
+function occupancy(P, s, occ) {
+  occ.fill(-1);
+  for (let i = 0; i < s.pos.length; i++) if (s.pos[i] >= 0) {
+    const br = (s.pos[i] / P.cols) | 0, bc = s.pos[i] % P.cols;
+    for (const [dr, dc] of P.shapes[i]) occ[(br + dr) * P.cols + bc + dc] = i;
+  }
+}
+
+// One slide of bed i. Returns the new state, or null if the slide is not allowed.
+function slide(P, s, occ, i, dr, dc) {
+  if (s.pos[i] < 0) return null;
+  if (P.lock[i] >= 0 && s.pos[P.lock[i]] >= 0) return null;
+  if (P.axis[i] === "h" && dr !== 0) return null;
+  if (P.axis[i] === "v" && dc !== 0) return null;
+  const br = ((s.pos[i] / P.cols) | 0) + dr, bc = (s.pos[i] % P.cols) + dc;
+  let eat = null;
+  for (const [sr, sc] of P.shapes[i]) {
+    const r = br + sr, c = bc + sc;
+    if (r < 0 || c < 0 || r >= P.rows || c >= P.cols) return null;
+    const idx = r * P.cols + c;
+    if (occ[idx] !== -1 && occ[idx] !== i) return null;
+    if (P.gate[idx] >= 0 && s.pos[P.gate[idx]] >= 0) return null;       // gate still closed
+    const ch = s.cats[idx];
+    if (ch === "#") return null;
+    if (ch !== ".") {
+      if (ch !== P.colors[i]) return null;
+      (eat || (eat = [])).push(idx);
+    }
+  }
+  if (eat && eat.length > s.need[i]) return null;
+  const pos = s.pos.slice();
+  pos[i] = br * P.cols + bc;
+  let cats = s.cats, need = s.need;
+  if (eat) {
+    const a = cats.split("");
+    for (const e of eat) a[e] = ".";
+    cats = a.join("");
+    need = need.slice();
+    need[i] -= eat.length;
+    if (need[i] === 0) pos[i] = -1;
+  }
+  return { pos, need, cats, ate: !!eat };
+}
 
 /* ---------- solver: fewest single-cell slides ---------- */
 function solve(level, cap = 150000) {
-  const { rows, cols } = level, N = rows * cols;
-  const shapes = level.beds.map(b => b.cells), colors = level.beds.map(b => b.color);
-  const axis = level.beds.map(b => b.axis || ""), lock = level.beds.map(b => b.lock === undefined ? -1 : b.lock);
-  const start = {
-    pos: level.beds.map(b => b.r * cols + b.c),
-    need: level.beds.map(b => b.need),
-    cats: level.map.join(""),
-  };
-  const keyOf = s => s.pos.join(",") + "/" + s.need.join("") + "/" + s.cats;
+  const P = prepare(level), start = startState(level);
   const states = [start], parent = [-1], mv = [null];
   const seen = new Set([keyOf(start)]);
-  const occ = new Int8Array(N);
-
+  const occ = new Int8Array(P.N);
   for (let head = 0; head < states.length; head++) {
     const s = states[head];
-    occ.fill(-1);
-    for (let i = 0; i < s.pos.length; i++) if (s.pos[i] >= 0) {
-      const br = (s.pos[i] / cols) | 0, bc = s.pos[i] % cols;
-      for (const [dr, dc] of shapes[i]) occ[(br + dr) * cols + bc + dc] = i;
-    }
-    for (let i = 0; i < s.pos.length; i++) {
-      if (s.pos[i] < 0) continue;
-      if (lock[i] >= 0 && s.pos[lock[i]] >= 0) continue;        // still locked
-      for (const [dr, dc] of DIRS) {
-        if (axis[i] === "h" && dr !== 0) continue;
-        if (axis[i] === "v" && dc !== 0) continue;
-        const br = ((s.pos[i] / cols) | 0) + dr, bc = (s.pos[i] % cols) + dc;
-        let ok = true, eat = null;
-        for (const [sr, sc] of shapes[i]) {
-          const r = br + sr, c = bc + sc;
-          if (r < 0 || c < 0 || r >= rows || c >= cols) { ok = false; break; }
-          const idx = r * cols + c;
-          if (occ[idx] !== -1 && occ[idx] !== i) { ok = false; break; }
-          const ch = s.cats[idx];
-          if (ch === "#") { ok = false; break; }
-          if (ch !== ".") {
-            if (ch !== colors[i]) { ok = false; break; }
-            (eat || (eat = [])).push(idx);
-          }
-        }
-        if (!ok) continue;
-        if (eat && eat.length > s.need[i]) continue;
-        let cats = s.cats, need = s.need;
-        const pos = s.pos.slice();
-        pos[i] = br * cols + bc;
-        if (eat) {
-          const a = cats.split("");
-          for (const e of eat) a[e] = ".";
-          cats = a.join("");
-          need = need.slice();
-          need[i] -= eat.length;
-          if (need[i] === 0) pos[i] = -1;
-        }
-        const ns = { pos, need, cats };
-        const k = keyOf(ns);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        states.push(ns); parent.push(head); mv.push([i, dr, dc]);
-        if (eat && pos.every(p => p < 0)) {
-          const pathOut = [];
-          for (let j = states.length - 1; j > 0; j = parent[j]) pathOut.push(mv[j]);
-          pathOut.reverse();
-          let switches = 0;
-          for (let j = 1; j < pathOut.length; j++) if (pathOut[j][0] !== pathOut[j - 1][0]) switches++;
-          return { d: pathOut.length, switches, path: pathOut, states: states.length };
-        }
-        if (states.length > cap) return { d: -2 };
+    occupancy(P, s, occ);
+    for (let i = 0; i < s.pos.length; i++) for (const [dr, dc] of DIRS) {
+      const ns = slide(P, s, occ, i, dr, dc);
+      if (!ns) continue;
+      const k = keyOf(ns);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      states.push(ns); parent.push(head); mv.push([i, dr, dc]);
+      if (ns.ate && ns.pos.every(p => p < 0)) {
+        const out = [];
+        for (let j = states.length - 1; j > 0; j = parent[j]) out.push(mv[j]);
+        out.reverse();
+        let switches = 0;
+        for (let j = 1; j < out.length; j++) if (out[j][0] !== out[j - 1][0]) switches++;
+        return { d: out.length, switches, path: out, states: states.length };
       }
+      if (states.length > cap) return { d: -2 };
     }
   }
   return { d: -1 };
+}
+
+/* ---------- how much thinking does a level need? ----------
+   Round 1: which beds can finish on their own, with everything else frozen?
+   Take those away. Round 2: which can finish now? And so on.
+   More rounds = a longer chain of "this one first". If a round finds no bed
+   at all, some bed has to step aside for another: that is marked "tricky". */
+function soloFinish(P, s, i, cap = 4000) {
+  const occ = new Int8Array(P.N);
+  const seen = new Set([s.pos[i] + "/" + s.cats]);
+  const queue = [s];
+  for (let head = 0; head < queue.length && queue.length < cap; head++) {
+    const cur = queue[head];
+    occupancy(P, cur, occ);
+    for (const [dr, dc] of DIRS) {
+      const ns = slide(P, cur, occ, i, dr, dc);
+      if (!ns) continue;
+      if (ns.pos[i] < 0) return true;
+      const k = ns.pos[i] + "/" + ns.cats;
+      if (seen.has(k)) continue;
+      seen.add(k); queue.push(ns);
+    }
+  }
+  return false;
+}
+function thinking(level) {
+  const P = prepare(level);
+  let s = startState(level), rounds = 0, tricky = false;
+  while (s.pos.some(p => p >= 0)) {
+    const done = [];
+    for (let i = 0; i < s.pos.length; i++) if (s.pos[i] >= 0 && soloFinish(P, s, i)) done.push(i);
+    if (!done.length) { tricky = true; break; }
+    const pos = s.pos.slice(), need = s.need.slice();
+    let cats = s.cats;
+    for (const i of done) { pos[i] = -1; need[i] = 0; cats = cats.split(P.colors[i]).join("."); }
+    s = { pos, need, cats };
+    rounds++;
+  }
+  return { rounds, tricky };
 }
 
 /* ---------- random level ---------- */
 let seed = 7411;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 const pick = a => a[Math.floor(rnd() * a.length)];
-const between = v => Array.isArray(v) ? v[0] + Math.floor(rnd() * (v[1] - v[0] + 1)) : v;
+const between = v => Array.isArray(v) ? v[0] + Math.floor(rnd() * (v[1] - v[0] + 1)) : (v || 0);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 function randomLevel(t) {
   const rows = t.rows, cols = t.cols;
   const g = Array.from({ length: rows }, () => new Array(cols).fill("."));
   const taken = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  for (let i = between(t.walls || 0); i > 0; i--) {
-    const r = Math.floor(rnd() * rows), c = Math.floor(rnd() * cols);
-    g[r][c] = "#"; taken[r][c] = true;
+  // walls come in mirrored pairs, so boards look designed instead of scattered
+  for (let left = between(t.walls); left > 0;) {
+    const r = Math.floor(rnd() * rows), c = Math.floor(rnd() * Math.ceil(cols / 2));
+    const m = cols - 1 - c;
+    if (taken[r][c]) { left--; continue; }
+    g[r][c] = "#"; taken[r][c] = true; left--;
+    if (m !== c && left > 0) { g[r][m] = "#"; taken[r][m] = true; left--; }
   }
-  // one bed per color: every color in a level has exactly one bed
-  const nBeds = Math.min(between(t.beds), COLOR_ORDER.length);
-  const bedColors = shuffle(COLOR_ORDER.slice(0, nBeds));
+  const nBeds = Math.min(t.beds, COLOR_ORDER.length);
+  // the two stars are always in; the friends take turns
+  const bedColors = shuffle(COLOR_ORDER.slice(0, 2).concat(shuffle(COLOR_ORDER.slice(2))).slice(0, nBeds));
   const beds = [];
   for (const color of bedColors) {
     let placed = false;
@@ -146,17 +215,16 @@ function randomLevel(t) {
     }
     if (!placed) return null;
   }
-  // rails: some beds only slide one way
   if (t.rail) {
     for (const b of beds) if (rnd() < t.rail) b.axis = rnd() < 0.5 ? "h" : "v";
     if (!beds.some(b => b.axis)) pick(beds).axis = rnd() < 0.5 ? "h" : "v";
   }
-  // locks: a bed that waits for another bed (its key) to be filled
   if (t.locks) {
     const ids = shuffle(beds.map((_, i) => i));
     const n = Math.min(between(t.locks), Math.floor(ids.length / 2));
     for (let j = 0; j < n; j++) beds[ids[j * 2]].lock = ids[j * 2 + 1];
   }
+  const catCells = [];
   for (const b of beds) {
     for (let n = 0; n < b.need; n++) {
       let free = [];
@@ -169,98 +237,104 @@ function randomLevel(t) {
       if (!free.length) return null;
       const [r, c] = pick(free);
       g[r][c] = b.color; taken[r][c] = true;
+      catCells.push([r, c, b.color]);
     }
   }
-  return { rows, cols, map: g.map(r => r.join("")), beds };
+  const level = { rows, cols, map: g.map(r => r.join("")), beds };
+  if (t.gates) {
+    // fence in a cat; the fence opens when another color's bed is full
+    const gates = [];
+    for (const [r, c, color] of shuffle(catCells.slice()).slice(0, between(t.gates))) {
+      const others = bedColors.filter(x => x !== color);
+      if (others.length) gates.push([r, c, pick(others)]);
+    }
+    if (!gates.length) return null;
+    level.gates = gates;
+  }
+  if (t.blankets) {
+    const hidden = catCells.filter(() => rnd() < t.blankets).map(([r, c]) => [r, c]);
+    if (!hidden.length) hidden.push(catCells[0].slice(0, 2));
+    level.blankets = hidden;
+  }
+  return level;
 }
 
-/* ---------- the four chapters, 25 levels each ---------- */
+/* ---------- eight chapters, 25 levels each ---------- */
 const HAND_MADE = [
   {
-    rows: 4, cols: 4,
-    hint: ["Drag the bed over the sleeping cats.", "It takes cats of its own color."],
+    rows: 4, cols: 4, hint: "h_drag",
     map: ["....", "....", "....", ".kk."],
     beds: [{ color: "k", need: 2, r: 0, c: 1, cells: SHAPES.i2h }],
-    guide: [{ bed: 0, path: [[1, 0], [1, 0], [1, 0]] }],
   },
   {
-    rows: 4, cols: 4,
-    hint: ["A cat of another color blocks the way.", "Tuck in the orange cat first."],
-    map: ["#k##", "#o##", "....", "...."],
+    rows: 4, cols: 4, hint: "h_block",
+    map: ["#k##", "#g##", "....", "...."],
     beds: [
       { color: "k", need: 1, r: 3, c: 0, cells: SHAPES.dot },
-      { color: "o", need: 1, r: 3, c: 3, cells: SHAPES.dot },
-    ],
-    guide: [
-      { bed: 1, path: [[0, -1], [0, -1], [-1, 0], [-1, 0]] },
-      { bed: 0, path: [[-1, 0], [0, 1], [-1, 0], [-1, 0]] },
+      { color: "g", need: 1, r: 3, c: 3, cells: SHAPES.dot },
     ],
   },
 ];
 
-const T = (n, rows, cols, beds, colors, shapes, dMin, dMax, swMin, budget, extra) =>
-  Object.assign({ n, rows, cols, beds, colors, shapes, dMin, dMax, swMin, budget }, extra || {});
+const T = (n, rows, cols, beds, o) => Object.assign({ n, rows, cols, beds, shapes: beds <= 3 ? SMALL : ALL }, o);
+// board sizes for the early chapters (A) and the late chapters (B)
+const SIZES_A = [
+  T(5, 5, 5, 3, { walls: [0, 2], dMin: 7,  dMax: 28, minRounds: 2, budget: 30 }),
+  T(6, 6, 5, 4, { walls: [0, 2], dMin: 11, dMax: 38, minRounds: 2, budget: 45 }),
+  T(7, 6, 6, 5, { walls: [0, 4], dMin: 15, dMax: 50, minRounds: 3, budget: 70 }),
+  T(7, 7, 6, 6, { walls: [2, 4], dMin: 19, dMax: 62, minRounds: 3, budget: 100 }),
+];
+const SIZES_B = [
+  T(4, 6, 5, 4, { walls: [0, 2], dMin: 12, dMax: 40, minRounds: 2, budget: 40 }),
+  T(7, 6, 6, 5, { walls: [0, 4], dMin: 16, dMax: 52, minRounds: 3, budget: 70 }),
+  T(8, 7, 6, 6, { walls: [2, 4], dMin: 20, dMax: 64, minRounds: 3, budget: 110 }),
+  T(6, 8, 6, 6, { walls: [2, 6], dMin: 24, dMax: 76, minRounds: 4, budget: 140 }),
+];
+const withExtra = (sizes, extra) => sizes.map(t => Object.assign({}, t, extra, t.beds <= 3 && extra.locks ? { locks: 1 } : {}));
 
 const CHAPTERS = {
-  1: {
-    handMade: HAND_MADE,
-    tiers: [
-      T(3, 4, 4, 2, 2,      SMALL, 5, 14, 1, 15),
-      T(6, 5, 5, 3, [2, 3], SMALL, 8, 24, 2, 30, { walls: [0, 1] }),
-      T(7, 6, 5, 4, 3,      ALL,  12, 32, 3, 45, { walls: [0, 2] }),
-      T(7, 6, 6, 5, [3, 4], ALL,  16, 44, 4, 70, { walls: [1, 3] }),
-    ],
-  },
-  2: {
-    hint: ["New: beds with arrows are on rails.", "They only slide the way the arrows point."],
-    tiers: [
-      T(5, 5, 5, 3, [2, 3], SMALL, 7, 26, 2, 30,  { walls: [0, 1], rail: 0.5 }),
-      T(7, 6, 5, 4, 3,      ALL,  12, 36, 3, 50,  { walls: [0, 2], rail: 0.5 }),
-      T(7, 6, 6, 5, [3, 4], ALL,  16, 48, 4, 70,  { walls: [1, 3], rail: 0.45 }),
-      T(6, 7, 6, 6, [4, 5], ALL,  20, 60, 6, 100, { walls: [1, 4], rail: 0.4 }),
-    ],
-  },
-  3: {
-    hint: ["New: a locked bed can't move.", "Fill the bed with the matching key to open it."],
-    tiers: [
-      T(5, 5, 5, 3, [2, 3], SMALL, 7, 26, 2, 30,  { walls: [0, 1], locks: 1 }),
-      T(6, 6, 5, 4, 3,      ALL,  12, 36, 3, 50,  { walls: [0, 2], locks: 1 }),
-      T(7, 6, 6, 5, [3, 4], ALL,  16, 48, 4, 70,  { walls: [1, 3], locks: [1, 2] }),
-      T(7, 7, 6, 6, [4, 5], ALL,  20, 60, 6, 100, { walls: [1, 4], locks: [1, 2] }),
-    ],
-  },
-  4: {
-    hint: ["Rails and locks together.", "Plan the order before you slide."],
-    tiers: [
-      T(4, 6, 5, 4, 3,           ALL, 12, 38, 3, 40,  { walls: [0, 2], rail: 0.35, locks: 1 }),
-      T(7, 6, 6, 5, [3, 4],      ALL, 16, 50, 4, 70,  { walls: [1, 3], rail: 0.35, locks: [1, 2] }),
-      T(8, 7, 6, 6, [4, 5],      ALL, 20, 62, 6, 110, { walls: [1, 4], rail: 0.3,  locks: [1, 2] }),
-      T(6, 8, 6, 6,      [5, 6], ALL, 24, 75, 7, 150, { walls: [3, 6], rail: 0.3,  locks: [1, 2] }),
-    ],
-  },
+  1: { handMade: HAND_MADE, tiers: [
+    T(3, 4, 4, 2, { walls: 0,      dMin: 4,  dMax: 14, minRounds: 1, budget: 15 }),
+    T(6, 5, 5, 3, { walls: [0, 2], dMin: 8,  dMax: 26, minRounds: 2, budget: 30 }),
+    T(7, 6, 5, 4, { walls: [0, 2], dMin: 12, dMax: 34, minRounds: 2, budget: 45 }),
+    T(7, 6, 6, 5, { walls: [0, 4], dMin: 16, dMax: 46, minRounds: 3, budget: 70 }),
+  ] },
+  2: { hint: "h_rail",    tiers: withExtra(SIZES_A, { rail: 0.5 }) },
+  3: { hint: "h_lock",    tiers: withExtra(SIZES_A, { locks: [1, 2] }) },
+  4: { hint: "h_blanket", tiers: withExtra(SIZES_A, { blankets: 0.6 }) },
+  5: { hint: "h_gate",    tiers: withExtra(SIZES_A, { gates: [1, 2] }) },
+  6: { hint: "h_mix",     tiers: withExtra(SIZES_B, { rail: 0.35, locks: [1, 2] }) },
+  7: { hint: "h_mix2",    tiers: withExtra(SIZES_B, { gates: [1, 2], locks: 1, blankets: 0.4 }) },
+  8: { hint: "h_all",     tiers: withExtra(SIZES_B, { rail: 0.25, locks: 1, gates: [1, 2], blankets: 0.4 }) },
 };
+const CHAPTER_COUNT = Object.keys(CHAPTERS).length;
 
 function timeFor(d, switches) {
   return Math.max(30, Math.min(180, Math.ceil((22 + d * 1.9 + switches * 3) / 5) * 5));
 }
+function runsOf(solution) {
+  const runs = [];
+  for (const [bed, dr, dc] of solution) {
+    const last = runs[runs.length - 1];
+    if (last && last.bed === bed) last.path.push([dr, dc]); else runs.push({ bed, path: [[dr, dc]] });
+  }
+  return runs;
+}
 
 function buildChapter(num) {
   const ch = CHAPTERS[num];
-  seed = 7411 * num + 13;
-  const levels = [], solutions = [];
+  seed = 7411 * num + 97;
+  const fixed = [], pool = [];
   for (const lv of ch.handMade || []) {
     const r = solve(lv);
     if (r.d < 0) throw new Error("hand-made level can't be solved");
-    levels.push({ ...lv, time: 60, best: r.d });
-    solutions.push(r.path);
+    fixed.push({ lv, r, hard: 0 });
   }
   ch.tiers.forEach((t, ti) => {
     const found = [], seenIds = new Set();
-    const t0 = Date.now();
+    const t0 = Date.now(), elapsed = () => (Date.now() - t0) / 1000;
     let tries = 0;
-    const elapsed = () => (Date.now() - t0) / 1000;
-    // look for up to twice as many as needed, then keep the most interesting
-    while (found.length < t.n * 2) {
+    while (found.length < t.n * 4) {
       if (elapsed() > t.budget && found.length >= t.n) break;
       if (elapsed() > t.budget * 4) break;
       tries++;
@@ -270,21 +344,38 @@ function buildChapter(num) {
       if (seenIds.has(id)) continue;
       seenIds.add(id);
       const r = solve(lv);
-      if (r.d < t.dMin || r.d > t.dMax || r.switches < t.swMin) continue;
-      found.push({ lv, r });
-      process.stderr.write(`ch${num} tier ${ti + 1}: ${found.length}/${t.n}  slides=${r.d} switches=${r.switches} (tries ${tries}, ${elapsed().toFixed(0)}s)\n`);
+      if (r.d < t.dMin || r.d > t.dMax) continue;
+      const th = thinking(lv);
+      if (th.rounds < t.minRounds && !th.tricky) continue;        // too plain: every bed can just walk to its cats
+      const hard = r.d + r.switches * 3 + th.rounds * 8 + (th.tricky ? 12 : 0) + t.rows * t.cols * 0.3;
+      found.push({ lv, r, hard, th });
+      process.stderr.write(`ch${num} tier ${ti + 1}: ${found.length}  slides=${r.d} rounds=${th.rounds}${th.tricky ? " tricky" : ""} (tries ${tries}, ${elapsed().toFixed(0)}s)\n`);
     }
     if (found.length < t.n) process.stderr.write(`!! ch${num} tier ${ti + 1} only found ${found.length} of ${t.n}\n`);
-    const score = f => f.r.switches * 3 + f.r.d;
-    found.sort((a, b) => score(b) - score(a));
-    const keep = found.slice(0, t.n).sort((a, b) => score(a) - score(b));
-    for (const { lv, r } of keep) {
-      if (new Set(lv.beds.map(b => b.color)).size !== lv.beds.length) throw new Error("two beds share a color");
-      levels.push({ ...lv, time: timeFor(r.d, r.switches), best: r.d });
-      solutions.push(r.path);
-    }
+    // spread the picks from easy to hard instead of taking only the extremes
+    found.sort((a, b) => a.hard - b.hard);
+    const n = Math.min(t.n, found.length);
+    for (let j = 0; j < n; j++) pool.push(found[n === 1 ? 0 : Math.round(j * (found.length - 1) / (n - 1))]);
   });
-  if (ch.hint && !levels[0].hint) levels[0].hint = ch.hint;
+
+  // pacing: climb, climb, climb, peak, breather. The chapter ends on its hardest level.
+  pool.sort((a, b) => a.hard - b.hard);
+  const ordered = [];
+  for (let g = 0; g < pool.length; g += 5) {
+    const grp = pool.slice(g, g + 5);
+    const last = g + 5 >= pool.length;
+    if (grp.length === 5 && !last) ordered.push(grp[0], grp[1], grp[2], grp[4], grp[3]);
+    else ordered.push(...grp);
+  }
+  const all = fixed.concat(ordered);
+  const levels = [], solutions = [];
+  all.forEach(({ lv, r }, i) => {
+    if (new Set(lv.beds.map(b => b.color)).size !== lv.beds.length) throw new Error("two beds share a color");
+    const out = { ...lv, time: lv.hint ? 60 : timeFor(r.d, r.switches), best: r.d };
+    if (i === 0 && ch.hint) out.hint = ch.hint;
+    if (out.hint) { out.guide = runsOf(r.path); out.time = Math.max(out.time, 75); }
+    levels.push(out); solutions.push(r.path);
+  });
   return { levels, solutions };
 }
 
@@ -292,17 +383,8 @@ if (require.main === module) {
   const arg = process.argv[2];
   if (arg === "merge") {
     const levels = [], solutions = [];
-    for (const n of [1, 2, 3, 4]) {
+    for (let n = 1; n <= CHAPTER_COUNT; n++) {
       const ch = JSON.parse(fs.readFileSync(path.join(__dirname, `chapter-${n}.json`), "utf8"));
-      // teaching levels get a finger demo: the solution, one drag at a time
-      ch.levels.forEach((lv, i) => {
-        if (!lv.hint || lv.guide) return;
-        lv.guide = [];
-        for (const [bed, dr, dc] of ch.solutions[i]) {
-          const lastRun = lv.guide[lv.guide.length - 1];
-          if (lastRun && lastRun.bed === bed) lastRun.path.push([dr, dc]); else lv.guide.push({ bed, path: [[dr, dc]] });
-        }
-      });
       levels.push(...ch.levels); solutions.push(...ch.solutions);
       process.stderr.write(`chapter ${n}: ${ch.levels.length} levels\n`);
     }
@@ -315,7 +397,7 @@ if (require.main === module) {
     fs.writeFileSync(path.join(__dirname, `chapter-${arg}.json`), JSON.stringify(buildChapter(Number(arg))));
     process.stderr.write(`chapter ${arg} done\n`);
   } else {
-    process.stderr.write("usage: node tools/levels.js 1|2|3|4|merge\n");
+    process.stderr.write("usage: node tools/levels.js 1..8 | merge\n");
   }
 }
-module.exports = { solve, SHAPES };
+module.exports = { solve, prepare, startState, occupancy, slide, DIRS, SHAPES };

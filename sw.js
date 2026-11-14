@@ -1,7 +1,8 @@
 // Keeps a copy of the game on the phone so it opens with no internet.
 // Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = "drop-the-bean-v1";
-const FILES = ["./", "index.html", "levels-data.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
+const CACHE = "drop-the-bean-v2";
+const FILES = ["./", "index.html", "levels-data.js", "js/core.js", "js/art.js", "js/play.js", "js/screens.js", "js/main.js",
+  "manifest.webmanifest", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
