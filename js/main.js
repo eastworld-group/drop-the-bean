@@ -9,7 +9,6 @@ function resize() {
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   layout();
-  if (jScroll >= 0) jScroll = Math.min(jScroll, journeyMax());
 }
 window.addEventListener("resize", resize);
 document.addEventListener("gesturestart", e => e.preventDefault());
@@ -30,24 +29,15 @@ cv.addEventListener("pointerdown", e => {
       timerOn = true; touched = true;
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* fine without it */ }
     }
-  } else if (screen === "home") {
-    const box = journeyBox();
-    if (e.clientY > box.y0 && e.clientY < box.y1) jDrag = { y: e.clientY, from: jScroll, vy: 0, lastY: e.clientY, lastT: performance.now() };
   }
 });
 cv.addEventListener("pointermove", e => {
   lastInput = time;
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press.moved = true;
   if (drag && !overlay) dragTo(e.clientX, e.clientY);
-  if (jDrag) {
-    jScroll = Math.max(0, Math.min(journeyMax(), jDrag.from - (e.clientY - jDrag.y)));
-    const now = performance.now(), dtm = (now - jDrag.lastT) / 1000;
-    if (dtm > 0.005) { jDrag.vy = lerp(jDrag.vy, -(e.clientY - jDrag.lastY) / dtm, 0.6); jDrag.lastY = e.clientY; jDrag.lastT = now; }
-  }
 });
 function release() {
   drag = null;
-  if (jDrag) { jVel = press && press.moved ? jDrag.vy : 0; jDrag = null; }
   if (press && !press.moved) {
     for (let i = buttons.length - 1; i >= 0; i--) {                    // the last one drawn is on top
       const b = buttons[i];
@@ -59,7 +49,7 @@ function release() {
   press = null;
 }
 cv.addEventListener("pointerup", release);
-cv.addEventListener("pointercancel", () => { drag = null; jDrag = null; press = null; });
+cv.addEventListener("pointercancel", () => { drag = null; press = null; });
 
 // The cat's name is typed into a real text box, so the phone keyboard works.
 nameInput.addEventListener("input", () => {
@@ -73,10 +63,6 @@ nameInput.addEventListener("keydown", e => { if (e.key === "Enter") nameInput.bl
 function update(dt) {
   if (fade > 0) fade = Math.max(0, fade - dt * 4);
   if (toastMsg) { toastMsg.t += dt; if (toastMsg.t > 2) toastMsg = null; }
-  if (!jDrag && Math.abs(jVel) > 2) {                                   // the journey keeps gliding after a flick
-    jScroll = Math.max(0, Math.min(journeyMax(), jScroll + jVel * dt));
-    jVel *= Math.pow(0.04, dt);
-  } else if (!jDrag) jVel = 0;
   if (screen !== "game") return;
 
   introT += dt;
@@ -142,8 +128,8 @@ function frame(now) {
   update(dt);
   musicTick();
   // When nothing is moving and nobody is touching, draw less often to save battery.
-  const busy = drag || jDrag || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
-    Math.abs(jVel) > 2 || (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5;
+  const busy = drag || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
+    (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5;
   if (busy || frameNo % 3 === 0) render();
   requestAnimationFrame(frame);
 }

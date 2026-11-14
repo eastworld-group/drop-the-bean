@@ -1,6 +1,6 @@
 "use strict";
 /* ==================================================================
-   DROP THE BEAN - screens: home with the journey, the game,
+   DROP THE BEAN - screens: home with the level pages, the game,
    My cat, Shop, and the pop-up cards.
 =================================================================== */
 
@@ -28,15 +28,11 @@ function cushion(x, y, s) {
 }
 
 /* ==================================================================
-   HOME: your cat, Play, the daily puzzle and the journey of levels
+   HOME: your cat, Play, the daily puzzle and the levels in pages of 25
 =================================================================== */
-const NODE_GAP = 66, HEAD_H = 62;
-let jScroll = -1, jVel = 0, jDrag = null;
-const nodeY = i => 46 + i * NODE_GAP + (Math.floor(i / CHAPTER_SIZE) + 1) * HEAD_H;
-const nodeX = i => W / 2 + Math.sin(i * 0.85) * Math.min(108, W * 0.27);
-function journeyBox() { const s = safeArea(); const y0 = topY + 258, y1 = H - s.b - 78; return { y0, y1, h: Math.max(60, y1 - y0) }; }
-const journeyMax = () => Math.max(0, nodeY(LEVELS.length - 1) + 70 - journeyBox().h);
-function centerJourney(i) { jScroll = Math.max(0, Math.min(journeyMax(), nodeY(i) - journeyBox().h / 2)); jVel = 0; }
+let page = -1;                                   // which block of 25 levels is showing
+const pageOf = i => Math.floor(i / CHAPTER_SIZE);
+function showLevel(i) { page = pageOf(Math.max(0, Math.min(LEVELS.length - 1, i))); }
 
 function drawHome() {
   const s = safeArea();
@@ -62,7 +58,7 @@ function drawHome() {
   const dLabel = (dailyDone() ? t("daily_done") : t("daily")) + (streak ? ".  " + t("streak", streak) : "");
   pillButton(W / 2 - pw / 2, topY + 208, pw, 36, dLabel, () => startLevel(dailyIndex(), true), false, { text: 0.42 });
 
-  drawJourney(next);
+  drawLevels(next);
 
   const ny = H - s.b - 62, nw = (W - 32 - 16) / 3;
   pillButton(16, ny, nw, 46, t("mycat"), () => go("mycat"), false, { fill: "#FFFFFF" });
@@ -70,45 +66,39 @@ function drawHome() {
   pillButton(16 + (nw + 8) * 2, ny, nw, 46, t("settings"), () => { overlay = { kind: "settings", t: 1, delay: 0 }; }, false, { fill: "#FFFFFF" });
 }
 
-function drawJourney(next) {
-  const box = journeyBox(), TH = theme();
-  if (jScroll < 0) centerJourney(next);
-  rr(10, box.y0, W - 20, box.h, 22); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fill();
-  ctx.save();
-  rr(10, box.y0, W - 20, box.h, 22); ctx.clip();
-  ctx.translate(0, box.y0 - jScroll);
-  const seen = y => y > jScroll - 70 && y < jScroll + box.h + 70;
+function drawLevels(next) {
+  const s = safeArea(), TH = theme();
+  const pages = Math.ceil(LEVELS.length / CHAPTER_SIZE);
+  if (page < 0 || page >= pages) page = pageOf(next);
+  const y0 = topY + 258, y1 = H - s.b - 76;
 
-  // the dotted path
-  ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 7; ctx.lineCap = "round"; ctx.setLineDash([1, 14]);
-  ctx.beginPath();
-  for (let i = 0; i < LEVELS.length; i++) {
-    const y = nodeY(i);
-    if (i === 0 || !seen(y) && !seen(nodeY(i - 1))) ctx.moveTo(nodeX(i), y); else ctx.lineTo(nodeX(i), y);
-  }
-  ctx.stroke(); ctx.setLineDash([]);
+  // which chapter, with arrows to turn the page
+  roundButton(18, y0 + 2, 40, "back", () => { page--; }, { dim: page === 0 });
+  roundButton(W - 18 - 40, y0 + 2, 40, "fwd", () => { page++; }, { dim: page === pages - 1 });
+  const bw = W - 2 * (18 + 40 + 10);
+  rr(W / 2 - bw / 2, y0 + 5, bw, 40, 20); ctx.fillStyle = TH.trayDark; ctx.fill();
+  rr(W / 2 - bw / 2, y0 + 2, bw, 40, 20); ctx.fillStyle = TH.tray; ctx.fill();
+  fitLabel(t(CHAPTER_KEYS[page] || "level", page + 1), W / 2, y0 + 16, 15, bw - 20, "#FFFFFF", 800);
+  const from = page * CHAPTER_SIZE + 1, to = Math.min(LEVELS.length, (page + 1) * CHAPTER_SIZE);
+  label(`${from} - ${to}`, W / 2, y0 + 32, 11, "rgba(255,255,255,0.85)", 700);
 
-  for (let i = 0; i < LEVELS.length; i++) {
-    const x = nodeX(i), y = nodeY(i);
-    if (i % CHAPTER_SIZE === 0 && seen(y - HEAD_H)) {                  // chapter banner
-      const ch = i / CHAPTER_SIZE, by = y - HEAD_H + 2, bw = Math.min(250, W - 70);
-      rr(W / 2 - bw / 2, by + 3, bw, 34, 17); ctx.fillStyle = TH.trayDark; ctx.fill();
-      rr(W / 2 - bw / 2, by, bw, 34, 17); ctx.fillStyle = TH.tray; ctx.fill();
-      fitLabel(`${ch + 1}.  ${t(CHAPTER_KEYS[ch] || "level", ch + 1)}`, W / 2, by + 18, 15, bw - 24, "#FFFFFF", 800);
-    }
-    if (!seen(y)) continue;
-    const stars = S.stars[i] || 0, isNext = i === next;
-    const r = isNext ? 25 + Math.sin(time * 4) * 1.5 : 23;
-    const sy = box.y0 - jScroll + y;                                   // where it is on screen
-    const down = pressedIn(x - 26, sy - 26, 52, 52) ? 3 : 0;
-    if (!down) { ctx.fillStyle = stars ? "#E0A419" : isNext ? "#D4620A" : "#8FB4E3"; oval(x, y + 4, r, r); ctx.fill(); }
-    ctx.fillStyle = stars ? "#FFF0B3" : isNext ? "#FF8A1F" : "#FFFFFF"; oval(x, y + down, r, r); ctx.fill();
-    label(String(i + 1), x, y + 1 + down, i >= 99 ? 15 : 17, isNext && !stars ? "#FFFFFF" : INK);
-    if (stars) for (let k = 0; k < 3; k++) drawStar(x + (k - 1) * 13, y + 33, 5.5, k < stars);
-    if (isNext) drawCat(x + (x > W / 2 ? -46 : 46), y - 4, 46, S.hero, { seed: 2, wake: 1, hat: S.hat });
-    if (sy > box.y0 + 18 && sy < box.y1 - 18) buttons.push({ x: x - 26, y: sy - 26, w: 52, h: 52, onTap: () => startLevel(i) });
+  // 25 level buttons
+  const colsN = 5, gap = 10, top = y0 + 54;
+  const bs = Math.floor(Math.min(62, (W - 40 - gap * (colsN - 1)) / colsN, (y1 - top - gap * 4) / 5));
+  const gw = colsN * bs + (colsN - 1) * gap, x0 = (W - gw) / 2;
+  for (let i = 0; i < CHAPTER_SIZE; i++) {
+    const n = page * CHAPTER_SIZE + i;
+    if (n >= LEVELS.length) break;
+    const bx = x0 + (i % colsN) * (bs + gap), by = top + Math.floor(i / colsN) * (bs + gap);
+    const stars = S.stars[n] || 0, isNext = n === next;
+    const down = pressedIn(bx, by, bs, bs) ? 4 : 0;
+    if (!down) { rr(bx, by + 4, bs, bs, 16); ctx.fillStyle = stars ? "#E0A419" : isNext ? "#D4620A" : "#8FB4E3"; ctx.fill(); }
+    rr(bx, by + down, bs, bs, 16); ctx.fillStyle = stars ? "#FFF0B3" : isNext ? "#FF8A1F" : "#FFFFFF"; ctx.fill();
+    label(String(n + 1), bx + bs / 2, by + down + bs * (stars ? 0.4 : 0.52), Math.round(bs * (n >= 99 ? 0.3 : 0.36)), isNext && !stars ? "#FFFFFF" : INK);
+    if (stars) for (let k = 0; k < 3; k++) drawStar(bx + bs / 2 + (k - 1) * bs * 0.24, by + down + bs * 0.76, bs * 0.1, k < stars);
+    if (isNext) drawCat(bx + bs - 6, by + down + 4, bs * 0.62, S.hero, { seed: 2, wake: 1, hat: S.hat, noShadow: true });   // your cat waits on the next level
+    buttons.push({ x: bx, y: by, w: bs, h: bs + 4, onTap: () => startLevel(n) });
   }
-  ctx.restore();
 }
 
 /* ==================================================================
@@ -394,7 +384,7 @@ function drawGame() {
 /* ==================================================================
    POP-UP CARDS: win, lose, pause, settings
 =================================================================== */
-const goHome = () => { centerJourney(Math.min(LEVELS.length - 1, levelIndex + (overlay && overlay.kind === "win" ? 1 : 0))); go("home"); };
+const goHome = () => { showLevel(levelIndex + (overlay && overlay.kind === "win" && !isDaily ? 1 : 0)); go("home"); };
 
 function drawOverlay() {
   const o = overlay;

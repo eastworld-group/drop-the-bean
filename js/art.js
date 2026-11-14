@@ -77,6 +77,8 @@ function drawIcon(icon, cx, cy, k, col) {
     ctx.beginPath(); ctx.moveTo(cx - 4 * k, cy - 8 * k); ctx.lineTo(cx - 9 * k, cy - 3 * k); ctx.lineTo(cx - 4 * k, cy + 2 * k); ctx.stroke();
   } else if (icon === "back") {
     ctx.beginPath(); ctx.moveTo(cx + 4 * k, cy - 9 * k); ctx.lineTo(cx - 5 * k, cy); ctx.lineTo(cx + 4 * k, cy + 9 * k); ctx.stroke();
+  } else if (icon === "fwd") {
+    ctx.beginPath(); ctx.moveTo(cx - 4 * k, cy - 9 * k); ctx.lineTo(cx + 5 * k, cy); ctx.lineTo(cx - 4 * k, cy + 9 * k); ctx.stroke();
   } else if (icon === "bulb") {
     oval(cx, cy - 3 * k, 8.5 * k, 8.5 * k); ctx.fill();
     rr(cx - 4.5 * k, cy + 5 * k, 9 * k, 6 * k, 2 * k); ctx.fill();
