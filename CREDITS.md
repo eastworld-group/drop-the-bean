@@ -7,9 +7,11 @@ free for any use, no credit required. They are credited here as a thank-you.
 
 | File in `sounds/` | Original | Author | Source |
 |---|---|---|---|
-| `meow-1.wav` | Meow of a Siamese cat | freemaster2 | https://commons.wikimedia.org/wiki/File:Meow_of_a_Siamese_cat_-_freemaster2.wav |
-| `meow-2.wav` | νιαούρισμα (meow), noise reduced | Tsester | Wikimedia Commons, file "2015-11-24.νιαούρισμα.Νιάου.noise reduced.flac" |
-| `meow-3.wav` | Maullido de gata hembra joven (young female cat) | George Miquilena | https://commons.wikimedia.org/wiki/File:Maullido_de_gata_hembra_joven.ogg |
+| `meow-soft.wav` | cat_softmew, from "Cat Purr & Meow" | Kerzoven | https://opengameart.org/content/cat-purr-meow |
+| `meow-kitten.wav` | Kitten Mew (a person imitating a kitten) | AntumDeluge | https://opengameart.org/content/kitten-mew |
+| `meow-siamese.wav` | Meow of a Siamese cat | freemaster2 | https://commons.wikimedia.org/wiki/File:Meow_of_a_Siamese_cat_-_freemaster2.wav |
+| `meow-house.wav` | νιαούρισμα (meow), noise reduced | Tsester | Wikimedia Commons, file "2015-11-24.νιαούρισμα.Νιάου.noise reduced.flac" |
+| `meow-young.wav` | Maullido de gata hembra joven (young female cat) | George Miquilena | https://commons.wikimedia.org/wiki/File:Maullido_de_gata_hembra_joven.ogg |
 
 The meows were trimmed, evened out in volume and saved as small WAV files.
 

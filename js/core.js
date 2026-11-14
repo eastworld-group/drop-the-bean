@@ -124,7 +124,7 @@ const WORDS = {
     done: "Done", back: "Back", start: "Start playing",
     need_bed: "{0} cats still need a bed.", need_bed1: "1 cat still needs a bed.", use_snooze: "Snooze: 30 more seconds",
     s_sound: "Sound: {0}", s_music: "Music: {0}", m_0: "Lullaby", m_1: "Sunny Window", m_2: "Tiptoe", m_3: "Dreamy", m_4: "Zoomies", m_5: "Hot Springs Town", m_6: "Happy Adventure", m_7: "Flowerbed Fields",
-    s_meow: "Meow: {0}", w_0: "Siamese", w_1: "House cat", w_2: "Young cat", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
+    s_meow: "Meow: {0}", w_0: "Soft mew", w_1: "Kitten", w_2: "Siamese", w_3: "House cat", w_4: "Young cat", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
     s_shapes: "Color shapes: {0}", s_calm: "Calm motion: {0}", s_board: "Board: {0}", on: "On", off: "Off",
     next_board: "Next board, {0}, at {1} stars", all_boards: "All boards unlocked",
     pu_hint: "Hint", pu_snooze: "Snooze", pu_treat: "Treat",
@@ -197,8 +197,9 @@ const VOICE = { k: 1.0, g: 1.18, o: 0.86, b: 0.95, w: 1.3, p: 1.42, m: 1.1 };
 
 // A meow, built from scratch: a buzzy note that rises ("me") then falls ("ow"),
 // pushed through a filter that slides from a bright "e" sound to a round "o" sound.
-// Three real cat recordings to choose from in Settings (see CREDITS.md).
-const MEOW_FILES = ["sounds/meow-1.wav", "sounds/meow-2.wav", "sounds/meow-3.wav"];
+// Five recordings to choose from in Settings (see CREDITS.md). The soft mew comes first: it is the default.
+const MEOW_FILES = ["sounds/meow-soft.wav", "sounds/meow-kitten.wav", "sounds/meow-siamese.wav", "sounds/meow-house.wav", "sounds/meow-young.wav"];
+const MEOW_GAIN = [0.6, 0.45, 0.7, 0.7, 0.6];
 const meowBuffers = [];
 function loadMeows() {
   MEOW_FILES.forEach((url, i) => {
@@ -215,8 +216,8 @@ function meow(delay, pitch) {
   if (rec) {                                       // the real recording, a little higher or lower for each cat
     const src = a.createBufferSource(), g = a.createGain();
     src.buffer = rec;
-    src.playbackRate.value = 0.88 + ((pitch || 1) - 0.86) * 0.55;
-    g.gain.value = 0.75;
+    src.playbackRate.value = 0.92 + ((pitch || 1) - 0.86) * 0.4;
+    g.gain.value = MEOW_GAIN[S.meow] || 0.6;
     src.connect(g); g.connect(a.destination);
     src.start(a.currentTime + (delay || 0));
     return;

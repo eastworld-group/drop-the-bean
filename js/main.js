@@ -122,16 +122,19 @@ function render() {
   if (style !== nameStyle) { nameStyle = style; nameInput.style.cssText = style; }
 }
 
-let last = performance.now(), frameNo = 0;
+let last = performance.now(), frameNo = 0, frameError = false;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now; time += dt; frameNo++;
-  update(dt);
+  // One bad frame must never freeze the game: note it once and carry on.
+  try { update(dt); } catch (e) { if (!frameError) { frameError = true; console.error(e); } }
   musicTick();
   // When nothing is moving and nobody is touching, draw less often to save battery.
   const busy = drag || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
     (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5;
-  if (busy || frameNo % 3 === 0) render();
+  if (busy || frameNo % 3 === 0) {
+    try { render(); } catch (e) { resize(); if (!frameError) { frameError = true; console.error(e); } }   // resize() also resets the drawing state
+  }
   requestAnimationFrame(frame);
 }
 

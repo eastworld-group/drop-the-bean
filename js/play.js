@@ -24,7 +24,7 @@ function layout() {
   if (screen !== "game" || !L) return;
   const top = topY + 122, bottom = 104 + (L.hint ? 56 : 0) + s.b;
   const availW = W - 44, availH = H - top - bottom;
-  cell = Math.floor(Math.min(availW / cols, availH / rows, 86));
+  cell = Math.max(24, Math.floor(Math.min(availW / cols, availH / rows, 86)));   // never collapses on a very short screen
   gx = Math.round((W - cols * cell) / 2);
   gy = Math.round(top + Math.max(0, (availH - rows * cell) * 0.45));
 }

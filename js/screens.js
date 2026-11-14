@@ -110,7 +110,8 @@ function drawLevels(next) {
 
   // 25 level buttons
   const colsN = 5, gap = 10, top = y0 + 54;
-  const bs = Math.floor(Math.min(62, (W - 40 - gap * (colsN - 1)) / colsN, (y1 - top - gap * 4) / 5));
+  // never smaller than a fingertip, even on a very short screen
+  const bs = Math.max(30, Math.floor(Math.min(62, (W - 40 - gap * (colsN - 1)) / colsN, (y1 - top - gap * 4) / 5)));
   const gw = colsN * bs + (colsN - 1) * gap, x0 = (W - gw) / 2;
   for (let i = 0; i < CHAPTER_SIZE; i++) {
     const n = page * CHAPTER_SIZE + i;
