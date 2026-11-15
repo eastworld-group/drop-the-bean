@@ -13,7 +13,6 @@ let toastMsg = null, press = null;
 let aim = null;                     // "treat", "hint" or "hammer" while she is choosing what to use the powerup on
 let snoozed = false, usedPowerup = false;   // this level: was a Snooze used, was any powerup used
 let meterStars = 3, meterJump = -9; // the slide meter remembers the last star count, to jump when one is lost
-let turned = false;                 // the phone is on its side and too short to play: a card asks her to turn it back
 let creaky = [];                    // per cell: 0 plain floor, 1 a creaky board, 2 a board that broke (a hole)
 let holeT = {};                     // when each hole opened (r * cols + c), so it can open with a little give
 let fixT = {};                      // when each hole was fixed with a Hammer, for a little pop
@@ -35,8 +34,6 @@ function go(where) {
 function layout() {
   const s = safeArea();
   topY = s.t + 8;
-  turned = W > H && H < 520;                          // the game is laid out for an upright phone
-  if (turned) drag = null;
   if (screen !== "game" || !L) return;
   const top = topY + 150, bottom = 104 + (L.hint ? 56 : 0) + s.b;
   const availW = W - 44, availH = H - top - bottom;

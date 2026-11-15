@@ -882,23 +882,6 @@ function drawSettings() {
   pillButton(x + 24, y + 62 + 7 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
 }
 
-// The phone is lying on its side. The game is made for an upright phone, so ask her to turn it back.
-function drawTurn() {
-  ctx.fillStyle = "rgba(20, 26, 80, 0.35)"; ctx.fillRect(0, 0, W, H);
-  const cw = Math.max(200, Math.min(380, W - 40)), ch = Math.max(120, Math.min(210, H - 24));
-  const x = (W - cw) / 2, y = (H - ch) / 2;
-  card(x, y, cw, ch);
-  // a little phone that tips upright, again and again
-  const tip = S.calm ? 0 : clamp01(1 - ((time % 2.6) - 0.5) / 0.7) * Math.PI / 2, ps = Math.min(34, ch * 0.2);
-  ctx.save(); ctx.translate(W / 2, y + ch * 0.32); ctx.rotate(tip);
-  rr(-ps * 0.56, -ps, ps * 1.12, ps * 2, ps * 0.22); ctx.fillStyle = INK; ctx.fill();
-  rr(-ps * 0.44, -ps * 0.8, ps * 0.88, ps * 1.5, ps * 0.1); ctx.fillStyle = "#BFE6FF"; ctx.fill();
-  ctx.fillStyle = "#FF8A1F"; paw(0, -ps * 0.1, ps * 0.4);
-  ctx.restore();
-  fitLabel(t("turn_title"), W / 2, y + ch * 0.68, 20, cw - 32, INK, 900);
-  fitLabel(t("turn_sub"), W / 2, y + ch * 0.68 + 26, 14, cw - 32, SOFT, 700);
-}
-
 function drawToast() {
   if (!toastMsg) return;
   const a = toastMsg.t < 0.15 ? toastMsg.t / 0.15 : toastMsg.t > 1.6 ? Math.max(0, (2 - toastMsg.t) / 0.4) : 1;

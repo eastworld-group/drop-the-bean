@@ -414,7 +414,6 @@ const WORDS = {
     star_marks: "3 stars: {0} or fewer. 2 stars: {1} or fewer.",
     star_rule: "3 stars: finish with half the time left.", star_snooze: "A Snooze was used, so 2 stars at most.",
     star_relaxed: "Relaxed mode: fewer moves, more stars.", relaxed_done: "Solved", time_left: "Time left: {0}",
-    turn_title: "Please turn your phone upright", turn_sub: "This game is played standing tall.",
     coins_won: "+{0} coins", gift: "A gift: 1 {0}!", new_cat: "New cat: {0}!", streak_days: "Daily streak: {0}",
     next: "Next level", again: "Play again", retry: "Try again", home: "Home", resume: "Resume", restart: "Restart",
     done: "Done", back: "Back", start: "Start playing",

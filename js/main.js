@@ -32,7 +32,7 @@ cv.addEventListener("pointerdown", e => {
   lastInput = time;
   drag = null;
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-  if (overlay || turned) return;
+  if (overlay) return;
   if (screen === "chapters") { chapDrag = { y0: e.clientY, s0: chapScroll, y: e.clientY, t: time }; chapVel = 0; }
   if (screen === "game" && !aim) {                    // while she is aiming a powerup, a touch picks its target instead of sliding a bed
     const b = bedAtPoint(e.clientX, e.clientY);
@@ -61,7 +61,6 @@ function release() {
   if (drag && beds.includes(drag.bed)) { drag.bed.dropT = time; sfx.drop(); }   // put down: a little squish and a soft thud
   drag = null;
   if (chapDrag) { if (!press || !press.moved || time - chapDrag.t > 0.12) chapVel = 0; chapDrag = null; }
-  if (turned) { press = null; return; }
   if (press && !press.moved) {
     const wasAim = aim;
     let hit = null;
@@ -106,7 +105,7 @@ function update(dt) {
   }
   if (hinting && guideIdx >= guideRuns.length) hinting = false;
 
-  if (timerOn && !overlay && !paused && !aim && !thinking && !turned && S.timer) {  // the clock waits while she picks a target, while a hint thinks, or while she turns the phone back
+  if (timerOn && !overlay && !paused && !aim && !thinking && S.timer) {  // the clock waits while she picks a target or while a hint thinks
     timeLeft -= dt;
     if (timeLeft <= 10 && Math.ceil(timeLeft) !== lastTick) { lastTick = Math.ceil(timeLeft); if (timeLeft > 0) sfx.tick(); }
     if (timeLeft <= 0) { timeLeft = 0; finish("lose", 0.2); }
@@ -150,11 +149,6 @@ function placeBox(el, box) {
 function render() {
   buttons = [];
   drawBackground();
-  if (turned) {                                       // on its side: one card, nothing else to tap
-    drawTurn();
-    for (const el of [nameInput, playerInput, codeBox, restoreBox]) placeBox(el, null);
-    return;
-  }
   if (screen === "home") drawHome();
   else if (screen === "game") drawGame();
   else if (screen === "mycat") drawMyCat();
