@@ -15,42 +15,70 @@ document.addEventListener("gesturestart", e => e.preventDefault());
 document.addEventListener("contextmenu", e => e.preventDefault());
 
 /* ---------- touch ---------- */
+// Only one finger plays at a time. The finger that went down first owns the press (and any
+// drag) until it lifts; other fingers are ignored meanwhile. A phone marks the first finger
+// of a touch as "primary", so if a new primary finger arrives the old one must be gone
+// (its lift was missed), and the new one takes over instead of the game locking up.
 let lastInput = 0;
-cv.addEventListener("pointerdown", e => {
+const ours = e => !!press && e.pointerId === press.id;
+function wakeSound() {
   if (S.sound || S.music) audio();
   recordedMusic(true);
+}
+cv.addEventListener("pointerdown", e => {
+  if (press && e.pointerId !== press.id && !e.isPrimary) return;      // a second finger: not now
+  wakeSound();
   if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();   // tapping the game closes the keyboard
   lastInput = time;
-  press = { x: e.clientX, y: e.clientY, moved: false };
-  if (overlay) return;
-  if (screen === "game") {
+  drag = null;
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+  if (overlay || turned) return;
+  if (screen === "chapters") { chapDrag = { y0: e.clientY, s0: chapScroll, y: e.clientY, t: time }; chapVel = 0; }
+  if (screen === "game" && !aim) {                    // while she is aiming a powerup, a touch picks its target instead of sliding a bed
     const b = bedAtPoint(e.clientX, e.clientY);
     if (b) {
       drag = { bed: b, offX: e.clientX - (gx + b.c * cell), offY: e.clientY - (gy + b.r * cell), snap: snapshot(), saved: false };
       timerOn = true; touched = true;
+      b.popT = time; sfx.pick();                      // the bed lifts with a little pop
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* fine without it */ }
     }
   }
 });
 cv.addEventListener("pointermove", e => {
+  if (!ours(e)) return;
   lastInput = time;
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press.moved = true;
   if (drag && !overlay) dragTo(e.clientX, e.clientY);
+  if (chapDrag && press.moved) {                      // dragging the chapter list
+    const dt = Math.max(1 / 120, time - chapDrag.t);
+    chapVel = lerp(chapVel, -(e.clientY - chapDrag.y) / dt, 0.5);
+    chapDrag.y = e.clientY; chapDrag.t = time;
+    chapScroll = Math.max(0, Math.min(chapMax(), chapDrag.s0 - (e.clientY - chapDrag.y0)));
+  }
 });
 function release() {
+  wakeSound();                                        // an iPhone only lets sound start as a finger lifts
+  if (drag && beds.includes(drag.bed)) { drag.bed.dropT = time; sfx.drop(); }   // put down: a little squish and a soft thud
   drag = null;
+  if (chapDrag) { if (!press || !press.moved || time - chapDrag.t > 0.12) chapVel = 0; chapDrag = null; }
+  if (turned) { press = null; return; }
   if (press && !press.moved) {
-    for (let i = buttons.length - 1; i >= 0; i--) {                    // the last one drawn is on top
+    const wasAim = aim;
+    let hit = null;
+    for (let i = buttons.length - 1; i >= 0 && !hit; i--) {            // the last one drawn is on top
       const b = buttons[i];
-      if (press.x >= b.x && press.x <= b.x + b.w && press.y >= b.y && press.y <= b.y + b.h) {
-        press = null; sfx.tap(); b.onTap(); return;
-      }
+      if (press.x >= b.x && press.x <= b.x + b.w && press.y >= b.y && press.y <= b.y + b.h) hit = b;
     }
+    press = null;
+    if (hit) { sfx.tap(); hit.onTap(); }
+    // Aiming a Treat, a Hint or a Hammer: a tap anywhere but on a target backs out, and nothing is used up.
+    if (wasAim && aim === wasAim) cancelAim();
+    return;
   }
   press = null;
 }
-cv.addEventListener("pointerup", release);
-cv.addEventListener("pointercancel", () => { drag = null; press = null; });
+cv.addEventListener("pointerup", e => { if (ours(e)) release(); });
+cv.addEventListener("pointercancel", e => { if (ours(e)) { drag = null; press = null; chapDrag = null; } });
 
 // The cat's name is typed into a real text box, so the phone keyboard works.
 nameInput.addEventListener("input", () => {
@@ -66,16 +94,19 @@ playerInput.addEventListener("keydown", e => { if (e.key === "Enter") playerInpu
 function update(dt) {
   if (fade > 0) fade = Math.max(0, fade - dt * 4);
   if (toastMsg) { toastMsg.t += dt; if (toastMsg.t > 2) toastMsg = null; }
+  if (screen === "room") roomUpdate(dt);
+  if (screen === "chapters") chaptersUpdate(dt);
   if (screen !== "game") return;
 
   introT += dt;
+  searchTick();                                                         // a few milliseconds of hint or trapped-check searching
   while (guideIdx < guideRuns.length) {                                 // move the finger demo on as the player follows it
     const g = guideRuns[guideIdx], gb = beds.find(b => b.id === g.bed);
     if (!gb || (gb.r === g.end[0] && gb.c === g.end[1])) guideIdx++; else break;
   }
   if (hinting && guideIdx >= guideRuns.length) hinting = false;
 
-  if (timerOn && !overlay && !paused && S.timer) {
+  if (timerOn && !overlay && !paused && !aim && !thinking && !turned && S.timer) {  // the clock waits while she picks a target, while a hint thinks, or while she turns the phone back
     timeLeft -= dt;
     if (timeLeft <= 10 && Math.ceil(timeLeft) !== lastTick) { lastTick = Math.ceil(timeLeft); if (timeLeft > 0) sfx.tick(); }
     if (timeLeft <= 0) { timeLeft = 0; finish("lose", 0.2); }
@@ -100,6 +131,10 @@ function update(dt) {
         if (overlay.kind === "win") { sfx.win(); throwConfetti(); if (overlay.coins) sfx.coin(); } else sfx.lose();
       }
       overlay.t += dt;
+      if (overlay.kind === "win") {                   // each star makes a small sound as it lands
+        overlay.starsRung = overlay.starsRung || 0;
+        while (overlay.starsRung < overlay.stars && overlay.t >= STAR_AT[overlay.starsRung] + 0.18) sfx.star(overlay.starsRung++);
+      }
     }
   }
   for (const c of confetti) { c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.spin * dt; }
@@ -115,14 +150,21 @@ function placeBox(el, box) {
 function render() {
   buttons = [];
   drawBackground();
+  if (turned) {                                       // on its side: one card, nothing else to tap
+    drawTurn();
+    for (const el of [nameInput, playerInput, codeBox, restoreBox]) placeBox(el, null);
+    return;
+  }
   if (screen === "home") drawHome();
   else if (screen === "game") drawGame();
   else if (screen === "mycat") drawMyCat();
   else if (screen === "backup") drawBackup();
+  else if (screen === "room") drawRoomScreen();
+  else if (screen === "chapters") drawChapters();
   else drawShop();
   if (overlay && overlay.delay <= 0) drawOverlay();
   drawToast();
-  if (fade > 0) { ctx.globalAlpha = fade * fade; ctx.fillStyle = theme().bg[0]; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  if (fade > 0) { ctx.globalAlpha = fade * fade; ctx.fillStyle = look().bg[0]; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
 
   placeBox(nameInput, screen === "mycat" && !overlay && nameBox);
   placeBox(playerInput, screen === "backup" && !overlay && playerBox);
@@ -138,8 +180,9 @@ function frame(now) {
   try { update(dt); } catch (e) { if (!frameError) { frameError = true; console.error(e); } }
   musicTick();
   // When nothing is moving and nobody is touching, draw less often to save battery.
-  const busy = drag || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
-    (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5;
+  const busy = drag || aim || thinking || stuckJob || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
+    (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5 ||
+    (screen === "room" && roomBusy()) || (screen === "chapters" && chapVel);
   if (busy || frameNo % 3 === 0) {
     try { render(); } catch (e) { resize(); if (!frameError) { frameError = true; console.error(e); } }   // resize() also resets the drawing state
   }
@@ -147,6 +190,9 @@ function frame(now) {
 }
 
 /* ---------- start ---------- */
+// Game sounds should behave like sound effects on an iPhone: quiet when the silent switch
+// is on, and never stopping music she is playing in another app.
+try { if (navigator.audioSession) navigator.audioSession.type = "ambient"; } catch (e) { /* older phones: nothing to set */ }
 nameInput.value = S.names[S.hero] || "";
 nameInput.placeholder = CATS[S.hero].name;
 resize();

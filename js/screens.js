@@ -42,7 +42,7 @@ function drawHome() {
   const ms = 80, my = topY + 18;
   cushion(W / 2, my + ms * 0.62, ms);
   const cyc = time % 7, wake = cyc > 5.2 ? clamp01(Math.sin((cyc - 5.2) / 1.8 * Math.PI) * 2.5) : 0;
-  drawCat(W / 2, my + ms * 0.44, ms, S.hero, { seed: 1, noShadow: true, hat: S.hat, wake, still: true });
+  drawCat(W / 2, my + ms * 0.44, ms, S.hero, { seed: 1, noShadow: true, hat: S.hat, neck: S.neck, wake, still: true });
   if (!wake) {
     const zt = (time * 0.5) % 1;
     ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.9;
@@ -53,7 +53,11 @@ function drawHome() {
 
   const next = nextUnsolved();
   const pw = Math.min(260, W - 72);
+  // the Play button breathes softly (not with calm motion)
+  const pulse = S.calm ? 1 : 1 + Math.sin(time * 3) * 0.025;
+  ctx.save(); ctx.translate(W / 2, topY + 174); ctx.scale(pulse, pulse); ctx.translate(-W / 2, -topY - 174);
   pillButton(W / 2 - pw / 2, topY + 150, pw, 48, t("play", next + 1), () => startLevel(next), true);
+  ctx.restore();
   const streak = dailyStreak();
   const dLabel = (dailyDone() ? t("daily_done") : t("daily")) + (streak ? ".  " + t("streak", streak) : "");
   pillButton(W / 2 - pw / 2, topY + 208, pw, 36, dLabel, () => startLevel(dailyIndex(), true), false, { text: 0.42 });
@@ -62,15 +66,16 @@ function drawHome() {
 
   const ny = H - s.b - 62, nw = (W - 32 - 16) / 3;
   pillButton(16, ny, nw, 46, t("mycat"), () => go("mycat"), false, { fill: "#FFFFFF" });
-  pillButton(16 + nw + 8, ny, nw, 46, t("shop"), () => go("shop"), false, { fill: "#FFFFFF" });
+  pillButton(16 + nw + 8, ny, nw, 46, t("room"), () => go("room"), false, { fill: "#FFFFFF" });
   pillButton(16 + (nw + 8) * 2, ny, nw, 46, t("settings"), () => { overlay = { kind: "settings", t: 1, delay: 0 }; }, false, { fill: "#FFFFFF" });
 }
 
 // Each level is a little cat bed. Finished levels have a cat asleep in them;
 // your own cat sits awake in the next one.
 function levelBed(x, y, s, n, stars, isNext, pressed) {
-  const rim = stars ? "#D9920C" : isNext ? "#B9590A" : "#6F93C9";
-  const cushionCol = stars ? "#FFD86B" : isNext ? "#FF8A1F" : "#A9C7F0";
+  const TH = look();                                        // empty beds take the chapter's colors
+  const rim = stars ? "#D9920C" : isNext ? "#B9590A" : TH.wall;
+  const cushionCol = stars ? "#FFD86B" : isNext ? "#FF8A1F" : TH.soft;
   const inner = stars ? "#FFF4CC" : isNext ? "#FFE3B8" : "#FFFFFF";
   if (!pressed) { rr(x, y + 4, s, s, s * 0.3); ctx.fillStyle = "rgba(20, 28, 90, 0.25)"; ctx.fill(); }
   rr(x, y, s, s, s * 0.3); ctx.fillStyle = rim; ctx.fill();
@@ -82,7 +87,7 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
     label(text, x + s / 2, y + s * 0.6, Math.round(s * (text.length > 2 ? 0.27 : 0.32)), INK);
     return;
   }
-  if (isNext && !stars) drawCat(x + s / 2, y + s * 0.5, s * 0.66, S.hero, { seed: 2, wake: 1, hat: S.hat, noShadow: true });
+  if (isNext && !stars) drawCat(x + s / 2, y + s * 0.5, s * 0.66, S.hero, { seed: 2, wake: 1, hat: S.hat, neck: S.neck, noShadow: true });
   else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true });
   // number tag
   const tw = s * (text.length > 2 ? 0.5 : text.length > 1 ? 0.42 : 0.34), th = s * 0.3;
@@ -90,23 +95,34 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
   rr(x, y, tw - 4, th - 4, th / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
   label(text, x + tw / 2 - 2, y + th / 2 - 1.5, Math.round(s * 0.2), INK);
   if (stars) for (let k = 0; k < 3; k++) drawStar(x + s / 2 + (k - 1) * s * 0.22, y + s * 0.86, s * 0.095, k < stars);
+  if (stars && S.perfect[n]) {                               // 3 stars with no powerups: a paw stamp
+    const pr = s * 0.15, px = x + s - pr * 0.8, py = y + pr * 0.8;
+    ctx.fillStyle = "#B8234F"; oval(px, py + 1, pr + 1.5, pr + 1.5); ctx.fill();
+    ctx.fillStyle = "#FF5C8A"; oval(px, py, pr, pr); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; paw(px, py - pr * 0.05, pr * 0.95);
+  }
 }
 
 function drawLevels(next) {
-  const s = safeArea(), TH = theme();
+  const s = safeArea();
   const pages = Math.ceil(LEVELS.length / CHAPTER_SIZE);
   if (page < 0 || page >= pages) page = pageOf(next);
+  const TH = look();                                        // the page being shown sets the colors of the whole screen
   const y0 = topY + 258, y1 = H - s.b - 76;
 
   // which chapter, with arrows to turn the page
   roundButton(18, y0 + 2, 40, "back", () => { page--; }, { dim: page === 0 });
   roundButton(W - 18 - 40, y0 + 2, 40, "fwd", () => { page++; }, { dim: page === pages - 1 });
-  const bw = W - 2 * (18 + 40 + 10);
-  rr(W / 2 - bw / 2, y0 + 5, bw, 40, 20); ctx.fillStyle = TH.trayDark; ctx.fill();
-  rr(W / 2 - bw / 2, y0 + 2, bw, 40, 20); ctx.fillStyle = TH.tray; ctx.fill();
-  fitLabel(t(CHAPTER_KEYS[page] || "level", page + 1), W / 2, y0 + 16, 15, bw - 20, "#FFFFFF", 800);
+  // the banner: tapping it opens the list of every chapter
+  const bw = Math.max(60, W - 2 * (18 + 40 + 10)), bx = W / 2 - bw / 2, down = pressedIn(bx, y0 + 2, bw, 40) ? 3 : 0;
+  if (!down) { rr(bx, y0 + 5, bw, 40, 20); ctx.fillStyle = TH.trayDark; ctx.fill(); }
+  rr(bx, y0 + 2 + down, bw, 40, 20); ctx.fillStyle = TH.tray; ctx.fill();
+  fitLabel(chapterName(page), W / 2 - 8, y0 + 16 + down, 15, bw - 44, "#FFFFFF", 800);
   const from = page * CHAPTER_SIZE + 1, to = Math.min(LEVELS.length, (page + 1) * CHAPTER_SIZE);
-  label(`${from} - ${to}`, W / 2, y0 + 32, 11, "rgba(255,255,255,0.85)", 700);
+  label(`${from} - ${to}`, W / 2 - 8, y0 + 32 + down, 11, "#FFFFFF", 700);
+  ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round";   // a small "list" sign
+  for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(bx + bw - 30, y0 + 15 + k * 6 + down); ctx.lineTo(bx + bw - 16, y0 + 15 + k * 6 + down); ctx.stroke(); }
+  buttons.push({ x: bx, y: y0 + 2, w: bw, h: 44, onTap: openChapters });
 
   // 25 level buttons
   const colsN = 5, gap = 10, top = y0 + 54;
@@ -118,72 +134,123 @@ function drawLevels(next) {
     if (n >= LEVELS.length) break;
     const bx = x0 + (i % colsN) * (bs + gap), by = top + Math.floor(i / colsN) * (bs + gap);
     const down = pressedIn(bx, by, bs, bs) ? 4 : 0;
-    levelBed(bx, by + down, bs, n, S.stars[n] || 0, n === next, !!down);
+    const bob = n === next && !down && !S.calm ? Math.sin(time * 2.6) * 2.5 - 1 : 0;   // the next level gently bobs
+    levelBed(bx, by + down + bob, bs, n, S.stars[n] || 0, n === next, !!down);
     buttons.push({ x: bx, y: by, w: bs, h: bs + 4, onTap: () => startLevel(n) });
   }
 }
 
 /* ==================================================================
-   MY CAT: choose her, name her, dress her
+   MY CAT: choose her, name her, dress her.
+   Three tabs share the space under the big cat: Cats, Hats, Neck.
 =================================================================== */
-let nameBox = null;
+let nameBox = null, catTab = "cats";
 function pickCat(k) {
+  if (!catOpen(k)) { toast(t("cat_locked", CATS[k].name, CAT_STARS[k])); sfx.no(); return; }     // not enough stars yet
   S.hero = k; save();
   nameInput.value = S.names[k] || "";
   nameInput.placeholder = CATS[k].name;
   sfx.meow(0, VOICE[k]);
 }
-function pickHat(id) {
-  if (!id || S.hats.includes(id)) { S.hat = id; save(); sfx.tap(); return; }
-  const price = HATS.find(h => h.id === id).price;
-  if (S.coins < price) { toast(t("need_coins", price - S.coins)); sfx.no(); return; }
-  S.coins -= price; S.hats.push(id); S.hat = id; save();
-  sfx.coin(); toast(t("bought", t("hat_" + id)));
+// Put on something she owns, take it off (id ""), or ask whether to buy it.
+function pickWear(slot, id) {
+  const hat = slot === "hat", owned = hat ? S.hats : S.necks;
+  const wear = () => { if (hat) S.hat = id; else S.neck = id; save(); };
+  if (!id || owned.includes(id)) { wear(); return; }
+  const name = t((hat ? "hat_" : "neck_") + id), price = (hat ? HATS : NECKS).find(q => q.id === id).price;
+  askBuy({ name, price, pic: [slot, id] }, () => { owned.push(id); wear(); toast(t("bought_item", name)); });
 }
+const pickHat = id => pickWear("hat", id);
 
 function drawMyCat() {
   const s = safeArea(), setup = !S.setup;
   if (!setup) { roundButton(16, topY + 6, 44, "back", () => go("home")); coinPill(W - 16 - 86, topY + 11); }
   label(setup ? t("pick_cat") : t("mycat"), W / 2, topY + 28, 26, INK, 900);
 
-  const short = H - s.t - s.b < 720;
-  const ps = short ? 104 : 140, py = topY + 62;
-  cushion(W / 2, py + ps * 0.68, ps);
-  drawCat(W / 2, py + ps * 0.48, ps, S.hero, { wake: 1, hat: S.hat, noShadow: true, seed: 3 });
+  // Everything sits between the title and the Done button. The big cat takes
+  // whatever room is left, and no size can drop below its smallest value.
+  const top = topY + 56, bottom = H - s.b - 76, room = bottom - top;
+  const roomy = room >= 380;                                 // short screens drop the two lines of small text
+  const fixed = 58 + (roomy ? 42 : 0) + 46 + 50;
+  const ps = Math.max(56, Math.min(140, room - fixed - 2 * 78));
+  const cellH = Math.max(40, Math.min(72, (room - fixed - ps) / 2 - 6));
+  let y = top + Math.max(0, Math.min(26, (room - fixed - ps - 2 * (cellH + 6)) / 2));
+
+  cushion(W / 2, y + ps * 0.68, ps);
+  drawCat(W / 2, y + ps * 0.48, ps, S.hero, { wake: 1, hat: S.hat, neck: S.neck, noShadow: true, seed: 3 });
+  y += ps + 8;
 
   // the name is a real text box placed over the canvas (see main.js)
-  let y = py + ps + 8;
   nameBox = { x: W / 2 - 105, y, w: 210, h: 42 };
-  y += 58;
-  label(t("name_cat"), W / 2, y, 12, SOFT, 700);
-  y += 20;
-  fitLabel(t("b_" + S.hero), W / 2, y, 14, W - 40, INK, 700);
-  y += 22;
+  y += 50;
+  if (roomy) {
+    label(t("name_cat"), W / 2, y + 8, 12, INK, 700);
+    fitLabel(t("b_" + S.hero), W / 2, y + 28, 14, W - 40, INK, 700);
+    y += 42;
+  }
 
-  // choose from the seven cats
-  const step = Math.min(50, (W - 20) / CAST.length), x0 = W / 2 - step * (CAST.length - 1) / 2;
-  CAST.forEach((k, i) => {
-    const x = x0 + i * step, on = k === S.hero;
-    if (on) { rr(x - step / 2 + 2, y, step - 4, 66, 14); ctx.fillStyle = "#FFFFFF"; ctx.fill(); ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
-    drawCat(x, y + 26, 42, k, { seed: i * 1.7, wake: on ? 1 : 0, still: true });
-    label(CATS[k].name, x, y + 56, 10, INK, 700);
-    buttons.push({ x: x - step / 2, y, w: step, h: 66, onTap: () => pickCat(k) });
+  // tabs
+  y += 6;
+  const tabs = ["cats", "hats", "neck"], tw = Math.max(40, Math.min(104, (W - 32 - 16) / 3));
+  tabs.forEach((id, i) => {
+    const x = W / 2 + (i - 1) * (tw + 8) - tw / 2;
+    pillButton(x, y, tw, 32, t("tab_" + id), () => { catTab = id; }, catTab === id, { fill: "#FFFFFF", text: 0.46 });
   });
-  y += 80;
+  y += 46;
 
-  // hats
-  label(t("hats"), W / 2, y, 15, INK, 800);
-  y += 14;
-  const items = [{ id: "" }].concat(HATS), hw = Math.min(56, (W - 24) / items.length), hx0 = W / 2 - hw * (items.length - 1) / 2;
+  // the grid for this tab: five across
+  const items = catTab === "cats" ? HEROES.map(id => ({ id })) : [{ id: "" }].concat(catTab === "hats" ? HATS : NECKS);
+  const cw = Math.max(36, Math.min(68, (W - 20) / 5)), have = totalStars();
   items.forEach((it, i) => {
-    const x = hx0 + i * hw, own = !it.id || S.hats.includes(it.id), on = S.hat === it.id;
-    rr(x - hw / 2 + 3, y, hw - 6, 74, 14); ctx.fillStyle = on ? "#FFF0B3" : "#FFFFFF"; ctx.fill();
+    const row = Math.floor(i / 5), inRow = Math.min(5, items.length - row * 5);
+    const x = W / 2 + (i % 5 - (inRow - 1) / 2) * cw, yy = y + row * (cellH + 6);
+    let on, tap, text, locked = false, price = 0;
+    if (catTab === "cats") {
+      on = it.id === S.hero; locked = !catOpen(it.id);
+      text = CATS[it.id].name; tap = () => pickCat(it.id);
+    } else {
+      const hat = catTab === "hats", owned = !it.id || (hat ? S.hats : S.necks).includes(it.id);
+      on = (hat ? S.hat : S.neck) === it.id;
+      text = it.id ? t((hat ? "hat_" : "neck_") + it.id) : t("no_hat");
+      if (!owned) price = it.price;
+      tap = () => pickWear(hat ? "hat" : "neck", it.id);
+    }
+    rr(x - cw / 2 + 3, yy, cw - 6, cellH, 14);
+    ctx.fillStyle = on ? "#FFF0B3" : locked ? "rgba(255, 255, 255, 0.5)" : "#FFFFFF"; ctx.fill();
     if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
-    drawCat(x, y + 36, 38, S.hero, { wake: 1, still: true, noShadow: true, hat: it.id, seed: 5 });
-    if (own) label(it.id ? t("hat_" + it.id) : t("no_hat"), x, y + 64, 9, INK, 700);
-    else { drawCoin(x - 12, y + 63, 6); label(String(it.price), x + 7, y + 64, 11, INK, 800); }
-    buttons.push({ x: x - hw / 2, y, w: hw, h: 74, onTap: () => pickHat(it.id) });
+    const cs = Math.min(cw * 0.62, cellH * 0.54), ly = yy + cellH - 9;
+    if (catTab === "cats") {
+      ctx.globalAlpha = locked ? 0.5 : 1;
+      drawCat(x, yy + cellH * 0.42, cs * 1.1, it.id, { seed: i * 1.7, wake: on ? 1 : 0, still: true, noShadow: true });
+      ctx.globalAlpha = 1;
+    } else {
+      drawCat(x, yy + cellH * 0.55, cs, S.hero, { wake: 1, still: true, noShadow: true, seed: 5,
+        hat: catTab === "hats" ? it.id : "", neck: catTab === "neck" ? it.id : "" });
+    }
+    if (locked || price) {                                    // what it takes: stars for a cat, coins for an outfit
+      const num = String(locked ? CAT_STARS[it.id] : price);
+      ctx.font = `800 11px ${FONT}`;
+      const left = x - (ctx.measureText(num).width + 16) / 2;
+      if (locked) drawStar(left + 6, ly - 1, 6, true); else drawCoin(left + 6, ly - 1, 6);
+      label(num, left + 16, ly, 11, INK, 800, "left");
+    } else fitLabel(text, x, ly, 10, cw - 8, INK, 700);
+    buttons.push({ x: x - cw / 2, y: yy, w: cw, h: cellH + 4, onTap: tap });
   });
+  y += 2 * (cellH + 6) + 4;
+
+  // under the grid: how far the next cat is, or a short tip
+  if (catTab === "cats") {
+    const next = nextCat();
+    if (!next) label(t("all_cats"), W / 2, y + 12, 14, INK, 800);
+    else {
+      const need = CAT_STARS[next], bw = Math.max(60, Math.min(240, W - 80)), bx = W / 2 - bw / 2;
+      fitLabel(t("next_cat", CATS[next].name, need), W / 2, y + 8, 14, W - 32, INK, 800);
+      rr(bx, y + 20, bw, 12, 6); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+      rr(bx, y + 20, Math.max(12, bw * clamp01(have / need)), 12, 6); ctx.fillStyle = "#FFD23F"; ctx.fill();
+      rr(bx, y + 20, bw, 12, 6); ctx.strokeStyle = "#D9920C"; ctx.lineWidth = 1.5; ctx.stroke();
+      label(t("stars_of", have, need), W / 2, y + 43, 11, INK, 700);
+    }
+  } else label(t("wear_tip"), W / 2, y + 12, 13, INK, 700);
 
   pillButton(W / 2 - 120, H - s.b - 66, 240, 50, setup ? t("start") : t("done"), () => { S.setup = true; save(); go("home"); }, true);
 }
@@ -232,8 +299,8 @@ function drawBackup() {
   y += 92;
   pillButton(x, y, bw, 44, t("copy"), copyCode, true);
   y += 66;
-  fitLabel(t("code_note"), W / 2, y, 12, bw, SOFT, 700);
-  fitLabel(t("code_note2"), W / 2, y + 16, 12, bw, SOFT, 700);
+  fitLabel(t("code_note"), W / 2, y, 12, bw, INK, 700);
+  fitLabel(t("code_note2"), W / 2, y + 16, 12, bw, INK, 700);
   y += 46;
   label(t("have_code"), W / 2, y, 14, INK, 800);
   restoreBoxAt = { x, y: y + 12, w: bw, h: 70 };
@@ -242,68 +309,137 @@ function drawBackup() {
 }
 
 /* ==================================================================
-   SHOP: powerups for coins, boards for stars
+   SHOP: powerups for coins
 =================================================================== */
-const PU_ICON = { hint: ["bulb", "#F2A900"], snooze: ["clock", "#3B8BEF"], treat: ["fish", "#FF5C8A"] };
+const PU_ICON = { hint: ["bulb", "#F2A900"], snooze: ["clock", "#3B8BEF"], treat: ["fish", "#FF5C8A"], hammer: ["hammer", "#B5652A"] };
 function buyPowerup(id) {
-  const price = POWERUPS.find(q => q.id === id).price;
-  if (S.coins < price) { toast(t("need_coins", price - S.coins)); sfx.no(); return; }
-  S.coins -= price; S.pu[id]++; save();
-  sfx.coin(); toast(t("bought", t("pu_" + id)));
+  const name = t("pu_" + id), price = POWERUPS.find(q => q.id === id).price;
+  askBuy({ name, price, pic: ["pu", id] }, () => { S.pu[id]++; toast(t("bought", name)); });
 }
 
 function drawShop() {
-  roundButton(16, topY + 6, 44, "back", () => go("home"));
+  roundButton(16, topY + 6, 44, "back", () => go("room"));         // the shop is reached from My room
   coinPill(W - 16 - 86, topY + 11);
   label(t("shop"), W / 2, topY + 28, 26, INK, 900);
 
   let y = topY + 78;
   label(t("powerups"), W / 2, y, 16, INK, 800);
   y += 20;
-  const rw = Math.min(360, W - 32), rx = (W - rw) / 2;
-  POWERUPS.forEach(p => {
-    rr(rx, y + 4, rw, 70, 20); ctx.fillStyle = "#8FB4E3"; ctx.fill();
-    rr(rx, y, rw, 70, 20); ctx.fillStyle = "#FFFFFF"; ctx.fill();
-    ctx.fillStyle = "#EEF3FF"; oval(rx + 38, y + 35, 24, 24); ctx.fill();
-    drawIcon(PU_ICON[p.id][0], rx + 38, y + 35, 1.1, PU_ICON[p.id][1]);
-    label(t("pu_" + p.id), rx + 74, y + 22, 17, INK, 800, "left");
-    ctx.font = `700 12px ${FONT}`;
-    label(t("pu_" + p.id + "_d"), rx + 74, y + 41, 12, SOFT, 700, "left");
-    label(t("have", S.pu[p.id]), rx + 74, y + 57, 11, SOFT, 700, "left");
-    const bw = 78;
-    pillButton(rx + rw - bw - 12, y + 15, bw, 36, "    " + p.price, () => buyPowerup(p.id), true, { text: 0.44 });
-    drawCoin(rx + rw - bw + 8, y + 33 + (pressedIn(rx + rw - bw - 12, y + 15, bw, 36) ? 4 : 0), 9);
-    y += 82;
+  const rw = Math.max(200, Math.min(360, W - 32)), rx = (W - rw) / 2;
+  const list = POWERUPS.filter(p => puOpen(p.id));          // the Hammer only once she has met it
+  // four rows still fit a short screen: each row gets a little shorter (a very short one drops the description)
+  const step = Math.max(64, Math.min(82, (H - safeArea().b - y - 64) / list.length)), rh = step - 12, roomy = rh >= 62;
+  list.forEach(p => {
+    const mid = y + rh / 2;
+    rr(rx, y + 4, rw, rh, 20); ctx.fillStyle = "#8FB4E3"; ctx.fill();
+    rr(rx, y, rw, rh, 20); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+    ctx.fillStyle = "#EEF3FF"; oval(rx + 38, mid, 24, 24); ctx.fill();
+    drawIcon(PU_ICON[p.id][0], rx + 38, mid, 1.1, PU_ICON[p.id][1]);
+    const bw = 78, textW = rw - 74 - bw - 20;
+    label(t("pu_" + p.id), rx + 74, mid - (roomy ? 13 : 8), 17, INK, 800, "left");
+    if (roomy) {
+      let size = 12;                                         // the one-line description shrinks to fit a narrow phone
+      ctx.font = `700 ${size}px ${FONT}`;
+      while (size > 9 && ctx.measureText(t("pu_" + p.id + "_d")).width > textW) { size--; ctx.font = `700 ${size}px ${FONT}`; }
+      label(t("pu_" + p.id + "_d"), rx + 74, mid + 6, size, SOFT, 700, "left");
+    }
+    label(t("have", S.pu[p.id]), rx + 74, mid + (roomy ? 22 : 11), 11, SOFT, 700, "left");
+    pillButton(rx + rw - bw - 12, mid - 20, bw, 36, "    " + p.price, () => buyPowerup(p.id), true, { text: 0.44 });
+    drawCoin(rx + rw - bw + 8, mid - 2 + (pressedIn(rx + rw - bw - 12, mid - 20, bw, 36) ? 4 : 0), 9);
+    y += step;
   });
 
-  y += 14;
-  label(t("boards"), W / 2, y, 16, INK, 800);
-  y += 20;
-  const gap = 8, tw = (rw - gap * 3) / 4, have = totalStars(), cur = theme();
-  THEMES.forEach((th, i) => {
-    const x = rx + i * (tw + gap), locked = have < th.stars, on = cur === th;
-    const g = ctx.createLinearGradient(0, y, 0, y + 78);
-    g.addColorStop(0, th.bg[0]); g.addColorStop(1, th.bg[1]);
-    rr(x, y, tw, 78, 16); ctx.fillStyle = g; ctx.fill();
-    rr(x + tw * 0.2, y + 14, tw * 0.6, 30, 8); ctx.fillStyle = th.tray; ctx.fill();
-    rr(x + tw * 0.2 + 5, y + 19, tw * 0.6 - 10, 20, 5); ctx.fillStyle = th.tiles[0]; ctx.fill();
-    if (on) { rr(x, y, tw, 78, 16); ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 4; ctx.stroke(); }
-    if (locked) {
-      rr(x, y, tw, 78, 16); ctx.fillStyle = "rgba(20, 26, 80, 0.45)"; ctx.fill();
-      drawStar(x + tw / 2 - 16, y + 62, 7, true);
-      label(String(th.stars), x + tw / 2 + 8, y + 63, 13, "#FFFFFF", 800);
-    } else {
-      label(t("th_" + th.id), x + tw / 2, y + 62, 12, INK, 800);
-      buttons.push({ x, y, w: tw, h: 78, onTap: () => { S.theme = th.id; save(); sfx.tap(); } });
-    }
-  });
+  // hats and neckwear live with the cat
+  y += 10;
+  pillButton(rx, y, rw, 44, t("shop_outfits"), () => { catTab = "hats"; go("mycat"); }, false, { fill: "#FFFFFF", text: 0.36 });
+}
+
+/* ==================================================================
+   CHAPTERS: one row per chapter, scrolled by dragging. Tapping a row
+   opens that chapter's page on the home screen.
+=================================================================== */
+let chapScroll = 0, chapVel = 0, chapDrag = null;
+const CHAP_ROW = 68;
+function chapterStars(n) {
+  let got = 0;
+  const end = Math.min(LEVELS.length, (n + 1) * CHAPTER_SIZE);
+  for (let i = n * CHAPTER_SIZE; i < end; i++) got += S.stars[i] || 0;
+  return [got, (end - n * CHAPTER_SIZE) * 3];
+}
+function chapListBox() { const s = safeArea(); const top = topY + 62, bottom = Math.max(top + CHAP_ROW, H - s.b - 76); return { top, bottom, h: bottom - top }; }
+const chapCount = () => Math.max(1, Math.ceil(LEVELS.length / CHAPTER_SIZE));
+const chapMax = () => Math.max(0, chapCount() * CHAP_ROW - chapListBox().h + 8);
+function openChapters() {
+  go("chapters");
+  const box = chapListBox(), here = pageOf(nextUnsolved());
+  chapScroll = Math.max(0, Math.min(chapMax(), here * CHAP_ROW - box.h / 2 + CHAP_ROW / 2));     // her chapter in the middle
+  chapVel = 0; chapDrag = null;
+}
+function chaptersUpdate(dt) {
+  if (chapDrag || !chapVel) return;
+  chapScroll += chapVel * dt;
+  chapVel *= Math.exp(-dt * 4);
+  if (Math.abs(chapVel) < 8) chapVel = 0;
+  if (chapScroll < 0 || chapScroll > chapMax()) { chapScroll = Math.max(0, Math.min(chapMax(), chapScroll)); chapVel = 0; }
+}
+function chapterSwatch(n, x, y, s) {
+  const lk = lookFor(n);
+  const g = ctx.createLinearGradient(0, y, 0, y + s); g.addColorStop(0, lk.bg[0]); g.addColorStop(1, lk.bg[1]);
+  rr(x, y, s, s, 12); ctx.fillStyle = g; ctx.fill();
+  rr(x + s * 0.18, y + s * 0.42, s * 0.64, s * 0.42, 7); ctx.fillStyle = lk.tray; ctx.fill();
+  rr(x + s * 0.26, y + s * 0.5, s * 0.2, s * 0.26, 4); ctx.fillStyle = lk.tiles[0]; ctx.fill();
+  rr(x + s * 0.54, y + s * 0.5, s * 0.2, s * 0.26, 4); ctx.fillStyle = lk.wall; ctx.fill();
+  ctx.save(); ctx.translate(x + s * 0.5, y + s * 0.22); ctx.fillStyle = ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.lineCap = "round"; ctx.lineJoin = "round"; drawMotif(lk.motif, s * 0.13); ctx.restore();
+  rr(x, y, s, s, 12); ctx.strokeStyle = "rgba(20, 28, 90, 0.18)"; ctx.lineWidth = 1.5; ctx.stroke();
+}
+// Left-aligned text that shrinks to fit "maxW".
+function leftLabel(text, x, y, size, maxW, color) {
+  ctx.font = `800 ${size}px ${FONT}`;
+  while (size > 9 && ctx.measureText(text).width > maxW) { size--; ctx.font = `800 ${size}px ${FONT}`; }
+  label(text, x, y, size, color, 800, "left");
+}
+function drawChapters() {
+  const s = safeArea(), box = chapListBox(), here = pageOf(nextUnsolved());
+  roundButton(16, topY + 6, 44, "back", () => go("home"));
+  starPill(W - 16 - 86, topY + 11);
+  fitLabel(t("chapters"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
+  chapScroll = Math.max(0, Math.min(chapMax(), chapScroll));
+  const rw = Math.max(200, Math.min(380, W - 24)), rx = (W - rw) / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, box.top, W, box.h); ctx.clip();
+  const first = Math.max(0, Math.floor(chapScroll / CHAP_ROW)), last = Math.min(chapCount() - 1, Math.ceil((chapScroll + box.h) / CHAP_ROW));
+  for (let n = first; n <= last; n++) {
+    const y = box.top + 4 + n * CHAP_ROW - chapScroll, h = CHAP_ROW - 10, mine = n === here;
+    const down = !chapDrag && pressedIn(rx, y, rw, h) ? 3 : 0;
+    if (!down) { rr(rx, y + 4, rw, h, 18); ctx.fillStyle = mine ? "#D4620A" : "#8FB4E3"; ctx.fill(); }
+    rr(rx, y + down, rw, h, 18); ctx.fillStyle = mine ? "#FFF0B3" : "#FFFFFF"; ctx.fill();
+    if (mine) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
+    chapterSwatch(n, rx + 8, y + 7 + down, h - 14);
+    const [got, max] = chapterStars(n), tx = rx + h + 6, starsW = 84;
+    const room = rw - h - starsW - 14;
+    leftLabel(mine ? t("chapter_n", n + 1) + ".  " + t("you_here") : t("chapter_n", n + 1), tx, y + 18 + down, 12, room, mine ? "#9C3A00" : SOFT);
+    leftLabel(chapterName(n), tx, y + 38 + down, 16, room, INK);
+    drawStar(rx + rw - starsW + 6, y + h / 2 + down, 9, got > 0);
+    label(`${got} / ${max}`, rx + rw - starsW + 20, y + h / 2 + 1 + down, 14, INK, 800, "left");
+    const top = Math.max(y, box.top), bottom = Math.min(y + h + 4, box.bottom);
+    if (bottom > top) buttons.push({ x: rx, y: top, w: rw, h: bottom - top, onTap: () => { page = n; go("home"); } });
+  }
+  ctx.restore();
+  // a soft edge where the list scrolls under the title and the button
+  for (const [y0, dir] of [[box.top, 1], [box.bottom, -1]]) {
+    const g = ctx.createLinearGradient(0, y0, 0, y0 + dir * 14); g.addColorStop(0, "rgba(20, 28, 90, 0.12)"); g.addColorStop(1, "rgba(20, 28, 90, 0)");
+    ctx.fillStyle = g; ctx.fillRect(0, Math.min(y0, y0 + dir * 14), W, 14);
+  }
+  const pw = Math.min(260, W - 72);
+  pillButton(W / 2 - pw / 2, H - s.b - 64, pw, 48, t("where"), () => { page = here; go("home"); }, true);
 }
 
 /* ==================================================================
    GAME
 =================================================================== */
 function drawGuide() {
-  if (drag || overlay || leaving.length || guideIdx >= guideRuns.length) return;
+  if (drag || aim || overlay || leaving.length || guideIdx >= guideRuns.length) return;
   const g = guideRuns[guideIdx], bed = beds.find(b => b.id === g.bed);
   if (!bed || bed.r !== g.start[0] || bed.c !== g.start[1]) return;      // the player went their own way
   const [bcx, bcy] = bedCenter(bed, gx + bed.c * cell, gy + bed.r * cell);
@@ -332,40 +468,99 @@ function drawGuide() {
   ctx.restore();
 }
 
+// While a Treat or a Hint is being aimed, this bar says what to tap. It takes the
+// place of the undo / timer / restart row, so nothing there can be hit by mistake.
+function drawAimBar() {
+  const x = 16, w = Math.max(120, W - 32), y = topY + 62, h = 44;
+  rr(x, y + 4, w, h, 22); ctx.fillStyle = "rgba(10, 16, 60, 0.25)"; ctx.fill();
+  rr(x, y, w, h, 22); ctx.fillStyle = INK; ctx.fill();
+  ctx.fillStyle = "#FFFFFF"; oval(x + 24, y + 22, 15, 15); ctx.fill();
+  drawIcon(PU_ICON[aim][0], x + 24, y + 22, 0.62, PU_ICON[aim][1]);
+  const mid = x + 44 + (w - 58) / 2;
+  fitLabel(t("aim_" + aim), mid, y + 15, 15, w - 62, "#FFFFFF", 800);
+  fitLabel(t("aim_cancel"), mid, y + 32, 11, w - 62, "rgba(255, 255, 255, 0.82)", 700);
+}
+
+// The stars she would win right now. With the clock on they drain as time runs low;
+// the pill changes color and gives a little jump each time a star slips away.
+function drawSlideMeter() {
+  if (!S.timer) return;                                // relaxed mode: no clock, nothing to watch
+  const now = starsNow();
+  if (now < meterStars) meterJump = time;
+  meterStars = now;
+  const w = 120, h = 26, x = W / 2 - w / 2, y = topY + 110;
+  const jump = S.calm ? 0 : Math.max(0, 1 - (time - meterJump) / 0.5);
+  ctx.save();
+  if (jump > 0) { const k = 1 + Math.sin(jump * Math.PI) * 0.1; ctx.translate(W / 2, y + h / 2); ctx.scale(k, k); ctx.translate(-W / 2, -y - h / 2); }
+  rr(x, y + 3, w, h, h / 2); ctx.fillStyle = now === 3 ? "#8FB4E3" : now === 2 ? "#D9A441" : "#D9788A"; ctx.fill();
+  rr(x, y, w, h, h / 2); ctx.fillStyle = now === 3 ? "#FFFFFF" : now === 2 ? "#FFEDB8" : "#FFD9DE"; ctx.fill();
+  for (let k = 0; k < 3; k++) drawStar(W / 2 + (k - 1) * 26, y + h / 2, 9, k < now);
+  ctx.restore();
+}
+
+// One cat on the floor: asleep, under a blanket, or behind a gate.
+function drawFloorCat(r, c, cat, sc) {
+  const cx = gx + (c + 0.5) * cell, cy = gy + (r + 0.5) * cell, key = skin(cat.color);
+  if (cat.hidden) { ctx.save(); ctx.translate(cx, cy); ctx.scale(sc, sc); drawBlanket(0, 0, cell * 0.95, cat.seed); ctx.restore(); }
+  else {
+    if (drag && drag.bed.color === cat.color) {                      // the held bed can take this one: soft glow
+      ctx.fillStyle = CATS[key].bed; ctx.globalAlpha = 0.28 + Math.sin(time * 7) * 0.1;
+      rr(cx - cell / 2 + 3, cy - cell / 2 + 3, cell - 6, cell - 6, cell * 0.16); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    const peek = cat.peek < 1 ? 0.6 + 0.4 * easeOutBack(cat.peek) : 1;
+    drawCat(cx, cy, cell * 0.95, key, { seed: cat.seed, still: true, scale: sc * peek, hat: hatFor(key), neck: neckFor(key),
+      wake: overlay && overlay.kind === "lose" ? clamp01(overlay.t * 3) : 0 });
+    if (S.shapes) {
+      const sx = cx + cell * 0.3, sy = cy + cell * 0.3, sr = cell * 0.15;
+      ctx.fillStyle = CATS[key].dark; oval(sx, sy, sr + 1.5, sr + 1.5); ctx.fill();
+      ctx.fillStyle = "#FFFFFF"; oval(sx, sy, sr, sr); ctx.fill();
+      ctx.fillStyle = key === "w" ? INK : CATS[key].bed; drawShape(key, sx, sy, sr * 0.58);
+    }
+  }
+  if (gateShut(cat)) drawGate(cx, cy, cell * sc, skin(cat.gate));
+}
+
 function drawGame() {
-  const s = safeArea(), TH = theme();
+  const s = safeArea(), TH = look();
   // top row
-  roundButton(16, topY + 6, 44, "pause", () => { paused = true; overlay = { kind: "pause", t: 0, delay: 0 }; });
+  roundButton(16, topY + 6, 44, "pause", () => {
+    if (overlay) return;                                // the level is over and its card is on the way: nothing to pause
+    paused = true; overlay = { kind: "pause", t: 0, delay: 0 };
+  });
   coinPill(W - 16 - 86, topY + 11);
   label(isDaily ? t("daily") : t("level", levelIndex + 1), W / 2, topY + 28, 24, INK, 900);
 
-  // second row: undo, timer, cats left, restart
-  const low = S.timer && timeLeft <= 10 && timerOn;
-  const ph = 38, py = topY + 66, gap = 8;
-  const pw = Math.min(108, (W - 36 - 80 - gap * 3) / 2);
-  roundButton(18, py - 1, 40, "undo", undo, { dim: !undoStack.length || !!overlay });
-  roundButton(W - 18 - 40, py - 1, 40, "restart", () => startLevel(levelIndex, isDaily));
-  let px = W / 2 - pw - gap / 2;
-  const pulse = low ? 1 + Math.sin(time * 12) * 0.04 : 1;
-  ctx.save(); ctx.translate(px + pw / 2, py + ph / 2); ctx.scale(pulse, pulse); ctx.translate(-px - pw / 2, -py - ph / 2);
-  rr(px, py + 3, pw, ph, ph / 2); ctx.fillStyle = low ? "#C22B3F" : "#8FB4E3"; ctx.fill();
-  rr(px, py, pw, ph, ph / 2); ctx.fillStyle = low ? "#FF5C72" : "#FFFFFF"; ctx.fill();
-  const tc = low ? "#FFFFFF" : INK;
-  if (S.timer) {
-    ctx.strokeStyle = tc; ctx.lineWidth = 2.4; ctx.lineCap = "round";
-    oval(px + 22, py + ph / 2, 9, 9); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px + 22, py + ph / 2 - 5); ctx.lineTo(px + 22, py + ph / 2); ctx.lineTo(px + 26, py + ph / 2 + 2); ctx.stroke();
-    label(clock(timeLeft), px + pw / 2 + 13, py + ph / 2 + 1, 18, tc);
-  } else {
-    fitLabel(slides === 1 ? t("slide1") : t("slides", slides), px + pw / 2, py + ph / 2 + 1, 16, pw - 14, tc, 800);   // relaxed: count slides
+  // second row: undo, timer, cats left, restart (or what to tap, while a powerup is being aimed)
+  // third row: the stars she would win right now
+  drawSlideMeter();
+  if (aim) drawAimBar();
+  else {
+    const low = S.timer && timeLeft <= 10 && timerOn;
+    const ph = 38, py = topY + 66, gap = 8;
+    const pw = Math.max(40, Math.min(108, (W - 36 - 80 - gap * 3) / 2));
+    if (stuck && !S.calm) { ctx.fillStyle = "#FFD86B"; ctx.globalAlpha = 0.45 + 0.3 * Math.sin(time * 5); oval(38, py + 19, 27, 27); ctx.fill(); ctx.globalAlpha = 1; }
+    roundButton(18, py - 1, 40, "undo", undo, { dim: !undoStack.length || !!overlay });
+    roundButton(W - 18 - 40, py - 1, 40, "restart", () => startLevel(levelIndex, isDaily));
+    let px = W / 2 - pw - gap / 2;
+    if (S.timer) {                                      // the clock is only pressure now: it no longer changes the stars
+      const pulse = low ? 1 + Math.sin(time * 12) * 0.04 : 1;
+      ctx.save(); ctx.translate(px + pw / 2, py + ph / 2); ctx.scale(pulse, pulse); ctx.translate(-px - pw / 2, -py - ph / 2);
+      rr(px, py + 3, pw, ph, ph / 2); ctx.fillStyle = low ? "#C22B3F" : "#8FB4E3"; ctx.fill();
+      rr(px, py, pw, ph, ph / 2); ctx.fillStyle = low ? "#FF5C72" : "#FFFFFF"; ctx.fill();
+      const tc = low ? "#FFFFFF" : INK;
+      ctx.strokeStyle = tc; ctx.lineWidth = 2.4; ctx.lineCap = "round";
+      oval(px + 22, py + ph / 2, 9, 9); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px + 22, py + ph / 2 - 5); ctx.lineTo(px + 22, py + ph / 2); ctx.lineTo(px + 26, py + ph / 2 + 2); ctx.stroke();
+      label(clock(timeLeft), px + pw / 2 + 13, py + ph / 2 + 1, 18, tc);
+      ctx.restore();
+      px = W / 2 + gap / 2;
+    } else px = W / 2 - pw / 2;                         // relaxed: no clock, so "cats left" sits in the middle
+    pill(px, py, pw, ph);
+    ctx.fillStyle = "#FF8A1F"; paw(px + 23, py + ph / 2 - 1, 15);
+    fitLabel(t("left", catsLeft), px + pw / 2 + 13, py + ph / 2 + 1, 18, pw - 44, INK, 800);
   }
-  ctx.restore();
-  px = W / 2 + gap / 2;
-  pill(px, py, pw, ph);
-  ctx.fillStyle = "#FF8A1F"; paw(px + 23, py + ph / 2 - 1, 15);
-  fitLabel(t("left", catsLeft), px + pw / 2 + 13, py + ph / 2 + 1, 18, pw - 44, INK, 800);
 
-  // board
+  // board, in this chapter's colors
   const bw = cols * cell, bh = rows * cell, m = 12;
   rr(gx - m, gy - m + 8, bw + m * 2, bh + m * 2, 24); ctx.fillStyle = TH.trayDark; ctx.fill();
   rr(gx - m, gy - m, bw + m * 2, bh + m * 2, 24); ctx.fillStyle = TH.tray; ctx.fill();
@@ -376,6 +571,20 @@ function drawGame() {
       rr(x + 3, y + 5, cell - 6, cell - 6, cell * 0.2); ctx.fillStyle = TH.wallDark; ctx.fill();
       rr(x + 3, y + 1, cell - 6, cell - 6, cell * 0.2); ctx.fillStyle = TH.wall; ctx.fill();
       rr(x + 8, y + 5, cell - 16, (cell - 6) * 0.3, cell * 0.12); ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fill();
+    } else if (oneway[r] && oneway[r][c] >= 0) {
+      const k = r * cols + c, ft = arrowT[k] === undefined ? 9 : time - arrowT[k];
+      drawArrowTile(x, y, cell, oneway[r][c], TH, S.calm ? (ft < 0.6 ? 0.5 : 0) : clamp01(1 - ft / 0.6), r, c);
+    } else if (creaky[r] && creaky[r][c] === 1) {
+      const ft = fixT[r * cols + c] === undefined ? 9 : time - fixT[r * cols + c];
+      if (ft < 0.35 && !S.calm) {                                      // just fixed with a Hammer: it pops into place
+        const k = Math.max(0.05, easeOutBack(clamp01(ft / 0.35)));
+        ctx.save(); ctx.translate(x + cell / 2, y + cell / 2); ctx.scale(k, k); ctx.translate(-x - cell / 2, -y - cell / 2);
+        drawPlank(x, y, cell); ctx.restore();
+      } else drawPlank(x, y, cell);
+    }
+    else if (creaky[r] && creaky[r][c] === 2) {
+      rr(x + 1.5, y + 1.5, cell - 3, cell - 3, cell * 0.16); ctx.fillStyle = TH.tiles[(r + c) % 2]; ctx.fill();
+      drawHole(x, y, cell, S.calm ? 1 : clamp01((time - (holeT[r * cols + c] === undefined ? -9 : holeT[r * cols + c])) / 0.25));
     } else {
       rr(x + 1.5, y + 1.5, cell - 3, cell - 3, cell * 0.16);
       ctx.fillStyle = TH.tiles[(r + c) % 2]; ctx.fill();
@@ -388,27 +597,14 @@ function drawGame() {
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const cat = floorCats[r][c];
     if (!cat) continue;
-    const cx = gx + (c + 0.5) * cell, cy = gy + (r + 0.5) * cell, key = skin(cat.color);
     const sc = popIn(n++);
-    if (sc <= 0) continue;
-    if (cat.hidden) { ctx.save(); ctx.translate(cx, cy); ctx.scale(sc, sc); drawBlanket(0, 0, cell * 0.95, cat.seed); ctx.restore(); }
-    else {
-      if (drag && drag.bed.color === cat.color) {                      // the held bed can take this one: soft glow
-        ctx.fillStyle = CATS[key].bed; ctx.globalAlpha = 0.28 + Math.sin(time * 7) * 0.1;
-        rr(cx - cell / 2 + 3, cy - cell / 2 + 3, cell - 6, cell - 6, cell * 0.16); ctx.fill(); ctx.globalAlpha = 1;
-      }
-      const peek = cat.peek < 1 ? 0.6 + 0.4 * easeOutBack(cat.peek) : 1;
-      drawCat(cx, cy, cell * 0.95, key, { seed: cat.seed, still: true, scale: sc * peek, hat: hatFor(key),
-        wake: overlay && overlay.kind === "lose" ? clamp01(overlay.t * 3) : 0 });
-      if (S.shapes) {
-        const sx = cx + cell * 0.3, sy = cy + cell * 0.3, sr = cell * 0.15;
-        ctx.fillStyle = CATS[key].dark; oval(sx, sy, sr + 1.5, sr + 1.5); ctx.fill();
-        ctx.fillStyle = "#FFFFFF"; oval(sx, sy, sr, sr); ctx.fill();
-        ctx.fillStyle = key === "w" ? INK : CATS[key].bed; drawShape(key, sx, sy, sr * 0.58);
-      }
-    }
-    if (gateShut(cat)) drawGate(cx, cy, cell * sc, skin(cat.gate));
+    if (sc > 0) drawFloorCat(r, c, cat, sc);
   }
+
+  // Aiming: the board dims and the things she can tap stay bright.
+  const dimBoard = () => { rr(gx - m, gy - m, bw + m * 2, bh + m * 2, 24); ctx.fillStyle = "rgba(20, 26, 80, 0.45)"; ctx.fill(); };
+  const beat = 0.5 + 0.5 * Math.sin(time * 6);
+  if (aim === "hint") dimBoard();
 
   flying = [];
   const bedIn = i => S.calm || introT > 1.6 ? undefined : Math.max(0.01, easeOutBack(clamp01((introT - 0.15 - i * 0.05) / 0.3)));
@@ -419,7 +615,49 @@ function drawGame() {
     const p = clamp01(fl.f.t), e = p * p * (3 - 2 * p);
     const x = lerp(gx + (fl.f.fc + 0.5) * cell, fl.tx, e);
     const y = lerp(gy + (fl.f.fr + 0.5) * cell, fl.ty, e) - Math.sin(p * Math.PI) * cell * 0.55;
-    drawCat(x, y, cell * lerp(0.95, 0.84, e), fl.key, { seed: fl.seed, noShadow: true, hat: hatFor(fl.key), sx: 1 - Math.sin(p * Math.PI) * 0.08, sy: 1 + Math.sin(p * Math.PI) * 0.1 });
+    drawCat(x, y, cell * lerp(0.95, 0.84, e), fl.key, { seed: fl.seed, noShadow: true, hat: hatFor(fl.key), neck: neckFor(fl.key), sx: 1 - Math.sin(p * Math.PI) * 0.08, sy: 1 + Math.sin(p * Math.PI) * 0.1 });
+  }
+
+  // an arrow under a bed still shows, small, on top of it: it says which way that bed may go
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (!(oneway[r] && oneway[r][c] >= 0) || !bedAtCell(r, c, null)) continue;
+    const k = r * cols + c, ft = arrowT[k] === undefined ? 9 : time - arrowT[k], fl = ft < 0.6 ? 1 - ft / 0.6 : 0;
+    const held = drag && bedAtCell(r, c, null) === drag.bed ? -3 : 0;
+    ctx.globalAlpha = 0.92;
+    chevron(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell + held, cell * 0.17 * (1 + fl * 0.3), oneway[r][c], fl > 0 ? "#C22B3F" : "#FFFFFF", fl > 0 ? "#FFFFFF" : "rgba(20, 28, 90, 0.75)");
+    ctx.globalAlpha = 1;
+  }
+
+  if (aim === "hint") {                                                // every bed glows and can be tapped
+    for (const b of beds) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.12 + 0.2 * beat})`;
+      bedPath(gx + b.x * cell, gy + b.y * cell, b.cells, cell * 0.05, cell * 0.26); ctx.fill();
+      for (const [dr, dc] of b.cells) buttons.push({ x: gx + (b.c + dc) * cell, y: gy + (b.r + dr) * cell, w: cell, h: cell, onTap: () => hintBed(b) });
+    }
+  }
+  if (aim === "treat") {                                               // every cat on the floor gets a bright tile and a ring
+    dimBoard();
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const cat = floorCats[r][c];
+      if (!cat) continue;
+      const x = gx + c * cell, y = gy + r * cell;
+      rr(x + 2, y + 2, cell - 4, cell - 4, cell * 0.18); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+      ctx.strokeStyle = PU_ICON.treat[1]; ctx.lineWidth = 3; ctx.globalAlpha = 0.55 + 0.45 * beat; ctx.stroke(); ctx.globalAlpha = 1;
+      drawFloorCat(r, c, cat, 1);
+      buttons.push({ x, y, w: cell, h: cell, onTap: () => treatCat(r, c) });
+    }
+  }
+
+  if (aim === "hammer") {                                              // every hole gets a bright tile and a ring
+    dimBoard();
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      if (!creaky[r] || creaky[r][c] !== 2) continue;
+      const x = gx + c * cell, y = gy + r * cell;
+      rr(x + 2, y + 2, cell - 4, cell - 4, cell * 0.18); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+      ctx.strokeStyle = PU_ICON.hammer[1]; ctx.lineWidth = 3; ctx.globalAlpha = 0.55 + 0.45 * beat; ctx.stroke(); ctx.globalAlpha = 1;
+      drawHole(x, y, cell, 1);
+      buttons.push({ x, y, w: cell, h: cell, onTap: () => fixHole(r, c) });
+    }
   }
 
   for (const f of effects) {
@@ -427,6 +665,11 @@ function drawGame() {
     ctx.globalAlpha = a;
     if (f.type === "heart") { ctx.fillStyle = f.color; drawHeart(f.x, f.y, cell * 0.26); }
     else if (f.type === "puff") { ctx.fillStyle = f.color; oval(f.x, f.y, 4 + (1 - a) * 9, 4 + (1 - a) * 9); ctx.fill(); }
+    else if (f.type === "glint") { ctx.fillStyle = f.color; twinkle(f.x, f.y, Math.max(1, cell * 0.11 * (0.5 + a))); }
+    else if (f.type === "splinter") {
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot * 2);
+      ctx.fillStyle = f.color; ctx.fillRect(-cell * 0.07, -cell * 0.025, cell * 0.14, cell * 0.05); ctx.restore();
+    }
     else {
       ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot);
       ctx.fillStyle = "#FFFFFF"; ctx.strokeStyle = f.color; ctx.lineWidth = 2;
@@ -441,16 +684,34 @@ function drawGame() {
 
   // powerups
   const by = H - s.b - 92;
-  POWERUPS.forEach((p, i) => {
-    const x = W / 2 + (i - 1) * 92 - 27, count = S.pu[p.id];
-    const off = p.id === "snooze" && !S.timer;
-    roundButton(x, by, 54, PU_ICON[p.id][0], p.id === "hint" ? useHint : p.id === "snooze" ? useSnooze : useTreat,
-      { color: PU_ICON[p.id][1], badge: count > 0 ? count : "+", dim: off || (!!overlay && !(p.id === "snooze" && overlay.kind === "lose")) });
-    label(t("pu_" + p.id), x + 27, by + 70, 11, INK, 700);
+  const pus = POWERUPS.filter(p => puOpen(p.id)), use = { hint: useHint, snooze: useSnooze, treat: useTreat, hammer: useHammer };
+  const step = Math.min(92, (W - 32 - 54) / Math.max(1, pus.length - 1));      // four still fit a narrow phone
+  pus.forEach((p, i) => {
+    const x = W / 2 + (i - (pus.length - 1) / 2) * step - 27, count = S.pu[p.id];
+    const off = p.id === "snooze" && !S.timer, think = p.id === "hint" && !!thinking;
+    if (aim === p.id || think) {                                       // the one being aimed (or thinking) wears a ring
+      ctx.fillStyle = PU_ICON[p.id][1]; ctx.globalAlpha = 0.3 + 0.25 * beat; oval(x + 27, by + 29, 35, 35); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    roundButton(x, by, 54, PU_ICON[p.id][0], use[p.id],
+      { color: PU_ICON[p.id][1], badge: think ? undefined : count > 0 ? count : "+", dim: off || (!!overlay && !(p.id === "snooze" && overlay.kind === "lose")) });
+    if (think) {                                                       // thinking: three dots take the place of the count
+      const bx = x + 54 - 6, bdy = by + 6;
+      rr(bx - 16, bdy - 9, 32, 18, 9); ctx.fillStyle = INK; ctx.fill();
+      for (let k = 0; k < 3; k++) {
+        const hop = S.calm ? 0 : Math.max(0, Math.sin(time * 9 - k * 0.9)) * 3;
+        ctx.fillStyle = "#FFFFFF"; oval(bx - 8 + k * 8, bdy - hop, 2.6, 2.6); ctx.fill();
+      }
+    }
+    label(think ? t("thinking") : t("pu_" + p.id), x + 27, by + 70, 11, INK, 700);
   });
 
-  // words for the teaching levels
-  if (L.hint && !overlay) {
+  // trapped: a broken board left no bed a way to its cats
+  if (stuck && !overlay) {
+    const sw = Math.min(W - 24, 340), sy = by - 64;
+    rr(W / 2 - sw / 2, sy, sw, 52, 18); ctx.fillStyle = "rgba(37, 42, 92, 0.94)"; ctx.fill();
+    fitLabel(t("stuck"), W / 2, sy + 17, 14, sw - 24, "#FFFFFF", 700);
+    fitLabel(t("stuck2"), W / 2, sy + 36, 15, sw - 24, "#FFD86B", 800);
+  } else if (L.hint && !overlay) {                                     // words for the teaching levels
     const lines = t(L.hint), hy = by - 52;
     if (Array.isArray(lines)) lines.forEach((line, i) => fitLabel(line, W / 2, hy + i * 22, 15, W - 28, INK, 700));
   }
@@ -461,10 +722,14 @@ function drawGame() {
 =================================================================== */
 const goHome = () => { showLevel(levelIndex + (overlay && overlay.kind === "win" && !isDaily ? 1 : 0)); go("home"); };
 
+const STAR_AT = [0.3, 0.6, 0.9];                                        // when each win star lands, in seconds
 function drawOverlay() {
   const o = overlay;
+  if (o.kind === "roompick") return drawRoomPick();
+  if (o.kind === "choose") return drawChoose();
   if (o.kind === "settings") return drawSettings();
   if (o.kind === "pause") return drawPause();
+  if (o.kind === "buy") return drawBuy();
   buttons = buttons.filter(b => false);                                 // nothing behind the card can be tapped
   const a = Math.min(1, o.t * 4), win = o.kind === "win";
   ctx.fillStyle = `rgba(20, 26, 80, ${0.5 * a})`; ctx.fillRect(0, 0, W, H);
@@ -480,25 +745,33 @@ function drawOverlay() {
   const kinds = [...new Set(L.beds.map(b => skin(b.color)))].slice(0, 5);
   const step = Math.min(62, (cw - 40) / kinds.length);
   kinds.forEach((k, i) => drawCat(W / 2 + (i - (kinds.length - 1) / 2) * step, y - 22, 64, k,
-    { seed: i * 0.7, wake: win ? clamp01(o.t * 3 - i * 0.2) : 0, noShadow: true, hat: hatFor(k) }));
+    { seed: i * 0.7, wake: win ? clamp01(o.t * 3 - i * 0.2) : 0, noShadow: true, hat: hatFor(k), neck: neckFor(k) }));
   card(x, y, cw, ch);
   label(win ? t("win") : t("lose"), W / 2, y + 44, 29, INK, 900);
 
   const bw = cw - 56;
   if (win) {
-    for (let i = 0; i < 3; i++) {
-      const pop = Math.min(1, Math.max(0, (o.t - 0.2 - i * 0.18) * 5));
-      drawStar(W / 2 + (i - 1) * 64, y + 106 - (i === 1 ? 10 : 0), 26 * (0.6 + 0.4 * pop), i < o.stars && pop > 0);
+    for (let i = 0; i < 3; i++) {                                    // the stars land one by one (sounds: main.js)
+      const pop = S.calm ? 1 : clamp01((o.t - STAR_AT[i]) * 4);
+      const k = S.calm ? 1 : 0.6 + 0.4 * easeOutBack(pop);
+      drawStar(W / 2 + (i - 1) * 64, y + 106 - (i === 1 ? 10 : 0) - (1 - pop) * 14, 26 * k, i < o.stars && pop > 0);
     }
-    fitLabel(S.timer ? t("time_left", clock(o.left)) : t("slides_line", slides, L.best), W / 2, y + 154, 15, cw - 30, SOFT, 700);
+    // time left, and how stars are won
+    const head = S.timer ? t("time_left", clock(o.left)) : t("relaxed_done");
+    fitLabel(head + (o.perfect ? ". " + t("perfect") : ""), W / 2, y + 148, 15, cw - 30, o.perfect ? "#B8234F" : INK, 800);
+    fitLabel(S.timer ? (snoozed ? t("star_snooze") : t("star_rule")) : t("star_relaxed"), W / 2, y + 167, 12, cw - 30, SOFT, 700);
     // rewards
-    const cy = y + 184, text = t("coins_won", o.coins);
+    const cy = y + 191, text = t("coins_won", o.coins);
     ctx.font = `800 18px ${FONT}`;
     const tw = ctx.measureText(text).width;
     drawCoin(W / 2 - tw / 2 - 12, cy, 11);
     label(text, W / 2 + 12, cy + 1, 18, "#B8730A", 800);
-    const extra = o.gift ? t("gift", t("pu_" + o.gift)) : o.unlocked ? t("new_board", t("th_" + o.unlocked.id)) : o.daily ? t("streak_days", dailyStreak()) : "";
-    if (extra) fitLabel(extra, W / 2, y + 210, 14, cw - 30, "#D4620A", 800);
+    const news = [];                                                  // a new cat to choose is the biggest news
+    if (o.unlocked) news.push(t("new_cat", CATS[o.unlocked].name));
+    if (o.gift) news.push(t("gift", t("pu_" + o.gift)));
+    if (!news.length && o.daily) news.push(t("streak_days", dailyStreak()));
+    const extra = news.join("  ");
+    if (extra) fitLabel(extra, W / 2, y + 214, 14, cw - 30, "#D4620A", 800);
     const hasNext = levelIndex + 1 < LEVELS.length;
     if (isDaily || !hasNext) pillButton(x + 28, y + 236, bw, 54, t("home"), goHome, true);
     else pillButton(x + 28, y + 236, bw, 54, t("next"), () => startLevel(levelIndex + 1), true);
@@ -527,14 +800,70 @@ function drawPause() {
   row(1, t("restart"), () => startLevel(levelIndex, isDaily));
   row(2, t("home"), goHome);
   row(3, t("s_sound", S.sound ? t("on") : t("off")), () => { S.sound = !S.sound; save(); });
-  row(4, musicLabel(), cycleMusic);
+  row(4, t("s_music", S.music ? t("on") : t("off")), toggleMusic);   // a quick on/off here; tracks are chosen in Settings
+}
+
+// "Buy this?": every purchase stops here first. Nothing is spent until she taps Buy.
+function drawBuy() {
+  const o = overlay, it = o.item, kind = it.pic[0], id = it.pic[1];
+  buttons = [];                                                         // nothing behind the card can be tapped
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.max(200, Math.min(300, W - 40)), ch = 294;
+  const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
+  card(x, y, cw, ch);
+  fitLabel(t("buy_q", it.name), W / 2, y + 38, 22, cw - 36, INK, 900);
+  // what it is: the powerup's sign, or her cat wearing it
+  const py = y + 106;
+  ctx.fillStyle = "#EEF3FF"; oval(W / 2, py, 46, 46); ctx.fill();
+  if (kind === "pu") drawIcon(PU_ICON[id][0], W / 2, py, 2, PU_ICON[id][1]);
+  else if (kind === "room") drawThingPreview(roomItem(id).spot, id, W / 2, py, 72);
+  else drawCat(W / 2, py + 12, 58, S.hero, { wake: 1, still: true, noShadow: true, seed: 5,
+    hat: kind === "hat" ? id : S.hat, neck: kind === "neck" ? id : S.neck });
+  // the price, and the coins she has
+  const text = String(it.price);
+  ctx.font = `800 22px ${FONT}`;
+  const tw = ctx.measureText(text).width;
+  drawCoin(W / 2 - tw / 2 - 8, y + 176, 12);
+  label(text, W / 2 + 12, y + 177, 22, INK, 800);
+  fitLabel(t("buy_have", S.coins), W / 2, y + 202, 14, cw - 36, SOFT, 700);
+  const bw = (cw - 48 - 10) / 2;
+  pillButton(x + 24, y + 222, bw, 46, t("buy_no"), buyNo, false);
+  pillButton(x + 24 + bw + 10, y + 222, bw, 46, t("buy_yes"), buyYes, true);
+  if (time - o.at < 0.3) buttons = [];                                  // a stray double tap can never buy by accident
+}
+
+// A list card to choose one music track (or Off), or one meow sound. Choosing plays it,
+// so she can hear each one; Done goes back to Settings.
+function drawChoose() {
+  const o = overlay, music = o.what === "music";
+  buttons = [];
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const opts = music ? [-1].concat(TRACK_FILES.map((_, i) => i)) : MEOW_FILES.map((_, i) => i);
+  const colsN = music ? 2 : 1, rowsN = Math.ceil(opts.length / colsN);
+  const cw = Math.max(220, Math.min(340, W - 32));
+  const rowH = Math.max(30, Math.min(48, (H - topY - 12 - 60 - 76) / rowsN));
+  const ch = 60 + rowsN * rowH + 76;
+  const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
+  card(x, y, cw, ch);
+  label(music ? t("pick_music") : t("pick_meow"), W / 2, y + 34, 22, INK, 900);
+  const bw = (cw - 40 - (colsN - 1) * 8) / colsN;
+  opts.forEach((id, i) => {
+    const bx = x + 20 + (i % colsN) * (bw + 8), by = y + 58 + Math.floor(i / colsN) * rowH;
+    const on = music ? (id < 0 ? !S.music : S.music && S.track === id) : (S.meow || 0) === id;
+    const text = music ? (id < 0 ? t("off") : t("m_" + id)) : t("w_" + id);
+    pillButton(bx, by, bw, rowH - 8, text, () => {
+      if (music) chooseTrack(id); else { S.meow = id; save(); meow(0, 1); }
+    }, on, { fill: "#FFFFFF", text: 0.42 });
+  });
+  pillButton(x + 24, y + ch - 64, cw - 48, 48, t("done"), () => { overlay = o.prev || null; }, true);
+  if (time - o.at < 0.25) buttons = [];                                 // the tap that opened it can't also choose
 }
 
 function drawSettings() {
   buttons = [];
   ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
-  const cw = Math.min(330, W - 32), rowH = Math.min(52, (H - topY - 190) / 8);
-  const ch = 62 + 8 * rowH + 92;
+  const cw = Math.min(330, W - 32), rowH = Math.max(26, Math.min(52, (H - topY - 190) / 7));
+  const ch = 62 + 7 * rowH + 92;
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
   label(t("settings"), W / 2, y + 36, 26, INK, 900);
@@ -542,19 +871,32 @@ function drawSettings() {
   const row = (i, text, fn) => pillButton(x + 24, y + 62 + i * rowH, cw - 48, rowH - 10, text, fn, false);
   const flip = key => () => { S[key] = !S[key]; save(); };
   row(0, t("s_sound", onOff(S.sound)), flip("sound"));
-  row(1, musicLabel(), cycleMusic);
+  row(1, musicLabel(), () => { overlay = { kind: "choose", what: "music", t: 1, delay: 0, at: time, prev: overlay }; });
   row(2, S.timer ? t("s_timer") : t("s_timer_off"), flip("timer"));
   row(3, t("s_shapes", onOff(S.shapes)), flip("shapes"));
   row(4, t("s_calm", onOff(S.calm)), flip("calm"));
-  row(5, t("s_board", t("th_" + theme().id)), () => {
-    const ok = THEMES.filter(th => totalStars() >= th.stars);
-    S.theme = ok[(ok.indexOf(theme()) + 1) % ok.length].id; save();
-  });
-  row(6, t("s_meow", t("w_" + (S.meow || 0))), () => { S.meow = ((S.meow || 0) + 1) % MEOW_FILES.length; save(); meow(0, 1); });   // plays it, so you can hear each one
-  row(7, t("backup"), openBackup);
-  const nextT = THEMES.find(th => totalStars() < th.stars);
-  fitLabel(nextT ? t("next_board", t("th_" + nextT.id), nextT.stars) : t("all_boards"), W / 2, y + 62 + 8 * rowH + 8, 13, cw - 30, SOFT, 700);
-  pillButton(x + 24, y + 62 + 8 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
+  row(5, t("s_meow", t("w_" + (S.meow || 0))), () => { overlay = { kind: "choose", what: "meow", t: 1, delay: 0, at: time, prev: overlay }; });
+  row(6, t("backup"), openBackup);
+  const next = nextCat();                                               // stars open up new cats
+  fitLabel(next ? t("next_cat", CATS[next].name, CAT_STARS[next]) : t("all_cats"), W / 2, y + 62 + 7 * rowH + 8, 13, cw - 30, SOFT, 700);
+  pillButton(x + 24, y + 62 + 7 * rowH + 28, cw - 48, 48, t("done"), () => { overlay = null; }, true);
+}
+
+// The phone is lying on its side. The game is made for an upright phone, so ask her to turn it back.
+function drawTurn() {
+  ctx.fillStyle = "rgba(20, 26, 80, 0.35)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.max(200, Math.min(380, W - 40)), ch = Math.max(120, Math.min(210, H - 24));
+  const x = (W - cw) / 2, y = (H - ch) / 2;
+  card(x, y, cw, ch);
+  // a little phone that tips upright, again and again
+  const tip = S.calm ? 0 : clamp01(1 - ((time % 2.6) - 0.5) / 0.7) * Math.PI / 2, ps = Math.min(34, ch * 0.2);
+  ctx.save(); ctx.translate(W / 2, y + ch * 0.32); ctx.rotate(tip);
+  rr(-ps * 0.56, -ps, ps * 1.12, ps * 2, ps * 0.22); ctx.fillStyle = INK; ctx.fill();
+  rr(-ps * 0.44, -ps * 0.8, ps * 0.88, ps * 1.5, ps * 0.1); ctx.fillStyle = "#BFE6FF"; ctx.fill();
+  ctx.fillStyle = "#FF8A1F"; paw(0, -ps * 0.1, ps * 0.4);
+  ctx.restore();
+  fitLabel(t("turn_title"), W / 2, y + ch * 0.68, 20, cw - 32, INK, 900);
+  fitLabel(t("turn_sub"), W / 2, y + ch * 0.68 + 26, 14, cw - 32, SOFT, 700);
 }
 
 function drawToast() {

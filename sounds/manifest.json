@@ -1,0 +1,32 @@
+{
+  "sfx": {
+    "pickup": {"file": "sounds/sfx-pickup.wav", "alt": ["sounds/sfx-pickup-2.wav", "sounds/sfx-pickup-3.wav"], "seconds": 0.207, "gain": 0.8, "altGain": [0.85, 0.5],
+               "note": "soft mouth/bubble pop, about 1.3 kHz", "altNote": ["fabric lift (cloth rustle)", "short rising soft synth tone, about 350 Hz"]},
+    "drop":   {"file": "sounds/sfx-drop.wav", "alt": ["sounds/sfx-drop-2.wav", "sounds/sfx-drop-3.wav"], "seconds": 0.233, "gain": 0.6, "altGain": [1.0, 0.45],
+               "note": "leather bag set down, soft thud; main hit about 60 ms in", "altNote": ["low soft footstep thud, hits at once", "deep cushiony landing flump, 0.45 s, swells to its peak at about 110 ms"]},
+    "bump":   {"file": "sounds/sfx-bump.wav", "alt": ["sounds/sfx-bump-2.wav"], "seconds": 0.21, "gain": 0.55, "altGain": [0.8],
+               "note": "soft wooden knock, warm (about 900 Hz)", "altNote": ["shorter, drier wooden tap"]},
+    "crack":  {"file": "sounds/sfx-crack.wav", "alt": ["sounds/sfx-crack-2.wav", "sounds/sfx-crack-3.wav"], "seconds": 0.544, "gain": 0.7, "altGain": [0.75, 0.9],
+               "note": "short wood creak, then a wood break 0.16 s in (two CC0 sounds mixed)", "altNote": ["double wooden crack, loudest at about 0.19 s", "single splintering wood crack"]},
+    "tuck":   {"file": "sounds/sfx-tuck.wav", "alt": ["sounds/sfx-tuck-2.wav", "sounds/sfx-tuck-3.wav"], "seconds": 0.123, "gain": 0.7, "altGain": [0.7, 0.75],
+               "note": "clean short pluck, main tone about 1250 Hz", "altNote": ["single kalimba note, about 396 Hz (G4), warm; best for pitching up in combos", "glassy pure blip, about 1980 Hz"]},
+    "star":   {"file": "sounds/sfx-star.wav", "alt": ["sounds/sfx-star-2.wav", "sounds/sfx-star-3.wav"], "seconds": 0.592, "gain": 0.35, "altGain": [0.5, 0.55],
+               "note": "bright bell ding with quick decay (twinkle)", "altNote": ["softer, rounder bell, longer ring", "short glass ding, about 1.9 kHz"]},
+    "win":    {"file": "sounds/sfx-win.wav", "alt": ["sounds/sfx-win-2.wav"], "seconds": 2.655, "gain": 0.6, "altGain": [0.7],
+               "note": "happy vibraphone jingle, notes for 2 s then a ringing end chord", "altNote": ["short steel-drum jingle, 1.4 s"]},
+    "coin":   {"file": "sounds/sfx-coin.wav", "alt": ["sounds/sfx-coin-2.wav"], "seconds": 0.233, "gain": 0.35, "altGain": [1.0],
+               "note": "plingy coin chime (dense, so keep gain low)", "altNote": ["real coins clinking in the hand"]},
+    "tap":    {"file": "sounds/sfx-tap.wav", "alt": ["sounds/sfx-tap-2.wav"], "seconds": 0.051, "gain": 0.35, "altGain": [0.5],
+               "note": "very short soft organic click", "altNote": ["slightly rounder button click"]},
+    "purr":   {"file": "sounds/sfx-purr.wav", "alt": [], "seconds": 1.42, "gain": 0.55,
+               "note": "real sleepy cat purr, 1.4 s, gentle fade-out; low frequency so it reads quieter than its level"}
+  },
+  "music": [
+    {"file": "sounds/music-catmint.m4a", "title": "Catmint", "seconds": 154.67, "mood": "calm, gentle",
+     "note": "author's looped version; quieter on average than the other tracks (about 3.5 dB), raise its volume a little if it sounds too soft"},
+    {"file": "sounds/music-cozy-puzzle.m4a", "title": "Cozy Puzzle In-Game 2", "seconds": 128.0, "mood": "cozy, relaxed puzzle",
+     "note": "made for puzzle games, loopable, 90 BPM; denser than the other tracks, so about 3 dB louder on average, lower its volume a little if it stands out"},
+    {"file": "sounds/music-hush-hamlet.m4a", "title": "Hush Hamlet", "seconds": 96.0, "mood": "cozy town, light retro (chiptune)",
+     "note": "author's loop version, exactly 96.0 s"}
+  ]
+}

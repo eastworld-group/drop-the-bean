@@ -60,6 +60,16 @@ function drawShape(key, x, y, r) {
   else if (key === "b") ctx.rect(x - r * 0.85, y - r * 0.85, r * 1.7, r * 1.7);
   else if (key === "w") { ctx.moveTo(x, y - r * 1.15); ctx.lineTo(x + r * 0.9, y); ctx.lineTo(x, y + r * 1.15); ctx.lineTo(x - r * 0.9, y); ctx.closePath(); }
   else if (key === "p") { for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.5 : r * 1.15; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } ctx.closePath(); }
+  else if (key === "a") {                                    // heart
+    ctx.moveTo(x, y + r * 1.1);
+    ctx.bezierCurveTo(x - r * 2.1, y - r * 0.3, x - r * 0.8, y - r * 1.7, x, y - r * 0.5);
+    ctx.bezierCurveTo(x + r * 0.8, y - r * 1.7, x + r * 2.1, y - r * 0.3, x, y + r * 1.1);
+  } else if (key === "c") {                                  // crescent moon
+    ctx.arc(x, y, r * 1.15, 0.6, Math.PI * 2 - 0.6); ctx.arc(x + r * 0.575, y, r * 0.75, -1.049, 1.049, true); ctx.closePath();
+  } else if (key === "z") {                                  // four-point sparkle
+    for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + i * Math.PI / 4, q = i % 2 ? r * 0.42 : r * 1.3; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); }
+    ctx.closePath();
+  }
   else { ctx.rect(x - r * 0.35, y - r, r * 0.7, r * 2); ctx.rect(x - r, y - r * 0.35, r * 2, r * 0.7); }
   ctx.fill();
 }
@@ -92,6 +102,12 @@ function drawIcon(icon, cx, cy, k, col) {
     oval(cx - 2 * k, cy, 9 * k, 5.5 * k); ctx.fill();
     ctx.beginPath(); ctx.moveTo(cx + 5 * k, cy); ctx.lineTo(cx + 12 * k, cy - 6 * k); ctx.lineTo(cx + 12 * k, cy + 6 * k); ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#FFFFFF"; oval(cx - 6 * k, cy - 1.5 * k, 1.6 * k, 1.6 * k); ctx.fill();
+  } else if (icon === "hammer") {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
+    rr(-2.2 * k, -3 * k, 4.4 * k, 15 * k, 2 * k); ctx.fill();                  // handle
+    rr(-9 * k, -11 * k, 18 * k, 8 * k, 2.5 * k); ctx.fill();                   // head
+    ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha *= 0.45; rr(-7 * k, -9.6 * k, 6 * k, 2.2 * k, 1 * k); ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -159,16 +175,74 @@ function logo(text, x, y, size) {
   ctx.fillStyle = "#FFFFFF"; ctx.fillText(text, x, y);
 }
 
+/* ---------- chapter looks ---------- */
+// Which chapter's look to show: the level being played, or the page open on the home screen.
+function look() {
+  let n = screen === "game" && L ? pageOf(levelIndex) : page;
+  if (!(n >= 0)) n = pageOf(nextUnsolved());
+  return lookFor(n);
+}
+
+// One of the little shapes that drift across the background, drawn around 0,0.
+function drawMotif(kind, s) {
+  ctx.beginPath();
+  if (kind === "star") {
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? s * 0.48 : s; ctx.lineTo(Math.cos(a) * q, Math.sin(a) * q); }
+    ctx.closePath(); ctx.fill();
+  } else if (kind === "moon") {
+    ctx.arc(0, 0, s, 0.6, Math.PI * 2 - 0.6); ctx.arc(s * 0.5, 0, s * 0.652, -1.049, 1.049, true); ctx.closePath(); ctx.fill();
+  } else if (kind === "leaf") {
+    ctx.moveTo(0, -s * 1.1); ctx.quadraticCurveTo(s * 0.95, 0, 0, s * 1.1); ctx.quadraticCurveTo(-s * 0.95, 0, 0, -s * 1.1); ctx.fill();
+  } else if (kind === "heart") drawHeart(0, s * 0.15, s * 1.7);
+  else if (kind === "paw") paw(0, 0, s * 1.1);
+  else if (kind === "fish") {
+    ctx.ellipse(-s * 0.2, 0, s * 0.9, s * 0.5, 0, 0, Math.PI * 2);
+    ctx.moveTo(s * 0.5, 0); ctx.lineTo(s * 1.25, -s * 0.55); ctx.lineTo(s * 1.25, s * 0.55); ctx.closePath(); ctx.fill();
+  } else if (kind === "cloud") {
+    for (const [x, y, rx, ry] of [[-0.65, 0.15, 0.6, 0.45], [0, -0.15, 0.75, 0.6], [0.7, 0.15, 0.55, 0.42]]) {
+      ctx.moveTo((x + rx) * s, y * s); ctx.ellipse(x * s, y * s, rx * s, ry * s, 0, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  } else if (kind === "bubble") {
+    ctx.lineWidth = Math.max(1, s * 0.2); ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2); ctx.stroke();
+    oval(-s * 0.3, -s * 0.3, s * 0.16, s * 0.16); ctx.fill();
+  } else if (kind === "zzz") {
+    ctx.font = `900 ${Math.round(s * 1.9)}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("z", 0, 0);
+  } else if (kind === "diamond") {
+    ctx.moveTo(0, -s); ctx.lineTo(s * 0.72, 0); ctx.lineTo(0, s); ctx.lineTo(-s * 0.72, 0); ctx.closePath(); ctx.fill();
+  } else if (kind === "patch") { addRR(-s * 0.8, -s * 0.8, s * 1.6, s * 1.6, s * 0.35); ctx.fill(); }
+  else if (kind === "confetti") { addRR(-s * 0.32, -s * 0.75, s * 0.64, s * 1.5, s * 0.2); ctx.fill(); }
+  else if (kind === "key") {
+    ctx.lineWidth = Math.max(1, s * 0.26);
+    ctx.arc(-s * 0.6, 0, s * 0.42, 0, Math.PI * 2);
+    ctx.moveTo(-s * 0.18, 0); ctx.lineTo(s * 1.0, 0);
+    ctx.moveTo(s * 0.55, 0); ctx.lineTo(s * 0.55, s * 0.4);
+    ctx.moveTo(s * 0.92, 0); ctx.lineTo(s * 0.92, s * 0.4); ctx.stroke();
+  } else if (kind === "yarn") {
+    ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = Math.max(1, s * 0.16);
+    ctx.beginPath(); ctx.moveTo(s * 0.5, s * 0.62); ctx.quadraticCurveTo(s * 1.0, s * 1.1, s * 1.5, s * 0.6); ctx.stroke();
+  } else { oval(0, 0, s * 1.15, s * 0.72); ctx.fill(); }               // "bean"
+}
+
+const MOTIF_SPINS = { star: 1, leaf: 1, diamond: 1, patch: 1, confetti: 1, bean: 1 };
+const MOTIF_RISES = { bubble: 1, zzz: 1, heart: 1 };
 function drawBackground() {
-  const TH = theme();
+  const TH = look();
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, TH.bg[0]); g.addColorStop(1, TH.bg[1]);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  const kind = TH.motif, span = H + 80, dir = MOTIF_RISES[kind] ? -1.5 : 1;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
   for (let i = 0; i < 10; i++) {
-    const x = ((i * 137 + 20) % 100) / 100 * W;
-    const y = (((i * 71 + 30) % 100) / 100 * H + time * (4 + i % 3)) % (H + 60) - 30;
-    oval(x, y, 16 + (i % 3) * 7, 10 + (i % 3) * 4, 0.6 + i); ctx.fill();
+    const x = ((i * 137 + 20) % 100) / 100 * W + (S.calm ? 0 : Math.sin(time * 0.4 + i * 2.1) * 8);
+    const y = ((((i * 71 + 30) % 100) / 100 * H + time * (4 + i % 3) * dir) % span + span) % span - 40;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(MOTIF_SPINS[kind] ? 0.6 + i + (S.calm || kind === "bean" ? 0 : time * 0.12 * (i % 2 ? 1 : -1)) : Math.sin(i * 1.7) * 0.35);
+    ctx.fillStyle = ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+    drawMotif(kind, 13 + (i % 3) * 5);
+    ctx.restore();
   }
 }
 
@@ -216,6 +290,83 @@ function drawHat(id, hx, hy, hr) {
     ctx.lineTo(hx + hr * 0.56, hy - hr * 0.72); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#FF5C8A"; oval(hx, hy - hr * 0.98, hr * 0.11, hr * 0.11); ctx.fill();
     ctx.fillStyle = "#5AA9FF"; oval(hx - hr * 0.36, hy - hr * 0.92, hr * 0.08, hr * 0.08); ctx.fill(); oval(hx + hr * 0.36, hy - hr * 0.92, hr * 0.08, hr * 0.08); ctx.fill();
+  } else if (id === "beanie") {                    // a knitted hat with a pompom
+    ctx.fillStyle = "#F0524F"; ctx.strokeStyle = "#9E1F2E";
+    ctx.beginPath();
+    ctx.moveTo(hx - hr * 0.8, hy - hr * 0.66);
+    ctx.bezierCurveTo(hx - hr * 0.82, hy - hr * 1.78, hx + hr * 0.82, hy - hr * 1.78, hx + hr * 0.8, hy - hr * 0.66);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#FFF3D6";
+    rr(hx - hr * 0.9, hy - hr * 0.9, hr * 1.8, hr * 0.36, hr * 0.18); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = lw * 0.6;
+    ctx.beginPath();
+    for (const k of [-0.45, 0, 0.45]) { ctx.moveTo(hx + k * hr, hy - hr * 0.82); ctx.lineTo(hx + k * hr, hy - hr * 0.62); }
+    ctx.stroke();
+    ctx.lineWidth = lw;
+    oval(hx, hy - hr * 1.58, hr * 0.24, hr * 0.24); ctx.fill(); ctx.stroke();
+  } else if (id === "tophat") {
+    ctx.fillStyle = "#34365E"; ctx.strokeStyle = "#14152E";
+    rr(hx - hr * 0.56, hy - hr * 1.92, hr * 1.12, hr * 1.14, hr * 0.1); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#F0524F"; ctx.fillRect(hx - hr * 0.56 + lw / 2, hy - hr * 1.2, hr * 1.12 - lw, hr * 0.24);
+    ctx.fillStyle = "#34365E";
+    oval(hx, hy - hr * 0.84, hr * 0.98, hr * 0.2); ctx.fill(); ctx.stroke();
+  } else if (id === "wizard") {
+    ctx.fillStyle = "#5B4DC0"; ctx.strokeStyle = "#2A2270";
+    ctx.beginPath();
+    ctx.moveTo(hx - hr * 0.66, hy - hr * 0.8);
+    ctx.quadraticCurveTo(hx - hr * 0.2, hy - hr * 1.5, hx + hr * 0.02, hy - hr * 2.0);
+    ctx.quadraticCurveTo(hx + hr * 0.3, hy - hr * 2.2, hx + hr * 0.56, hy - hr * 1.9);
+    ctx.quadraticCurveTo(hx + hr * 0.32, hy - hr * 1.86, hx + hr * 0.3, hy - hr * 1.7);
+    ctx.quadraticCurveTo(hx + hr * 0.5, hy - hr * 1.2, hx + hr * 0.66, hy - hr * 0.8);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    oval(hx, hy - hr * 0.8, hr * 1.02, hr * 0.2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#FFE35A";
+    for (const [dx, dy, q] of [[-0.12, -1.22, 0.17], [0.24, -1.5, 0.11], [0.06, -1.78, 0.08]]) {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + i * Math.PI / 4, rad = hr * q * (i % 2 ? 0.42 : 1.2); ctx.lineTo(hx + dx * hr + Math.cos(a) * rad, hy + dy * hr + Math.sin(a) * rad); }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+/* ---------- things worn at the neck ----------
+   Drawn in two passes: the band goes on before the head (so the chin sits over it),
+   the part that hangs in front goes on after the face. */
+function drawNeck(id, hx, hy, hr, front) {
+  const lw = Math.max(1.4, hr * 0.16);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const band = (width, color, dark) => {              // a strap that curves under the chin
+    for (const [col, wd] of [[dark, width + lw * 2], [color, width]]) {
+      ctx.strokeStyle = col; ctx.lineWidth = wd;
+      ctx.beginPath(); ctx.ellipse(hx, hy + hr * 0.58, hr * 0.84, hr * 0.5, 0, 0.08 * Math.PI, 0.92 * Math.PI); ctx.stroke();
+    }
+  };
+  if (id === "collar") {
+    if (!front) { band(hr * 0.2, "#F0524F", "#9E1F2E"); return; }
+    const by = hy + hr * 1.2;
+    ctx.fillStyle = "#FFD23F"; ctx.strokeStyle = "#A8730A"; ctx.lineWidth = lw * 0.8;
+    oval(hx, by, hr * 0.2, hr * 0.2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx - hr * 0.13, by + hr * 0.03); ctx.lineTo(hx + hr * 0.13, by + hr * 0.03); ctx.stroke();
+    ctx.fillStyle = "#A8730A"; oval(hx, by + hr * 0.1, hr * 0.045, hr * 0.045); ctx.fill();
+  } else if (id === "bowtie") {
+    if (!front) return;
+    const by = hy + hr * 1.12;
+    ctx.fillStyle = "#3D63E0"; ctx.strokeStyle = "#1B2F8A"; ctx.lineWidth = lw * 0.9;
+    for (const d of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(hx, by); ctx.lineTo(hx + d * hr * 0.6, by - hr * 0.3); ctx.lineTo(hx + d * hr * 0.6, by + hr * 0.3); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle = "#7FA0FF"; oval(hx, by, hr * 0.15, hr * 0.17); ctx.fill(); ctx.stroke();
+  } else if (id === "scarf") {
+    if (!front) { band(hr * 0.34, "#FFC83D", "#A8650A"); return; }
+    ctx.save();
+    ctx.translate(hx + hr * 0.3, hy + hr * 1.0); ctx.rotate(-0.22);
+    ctx.fillStyle = "#FFC83D"; ctx.strokeStyle = "#A8650A"; ctx.lineWidth = lw * 0.9;
+    rr(-hr * 0.2, 0, hr * 0.4, hr * 0.72, hr * 0.1); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#F0524F";
+    ctx.fillRect(-hr * 0.2 + lw * 0.45, hr * 0.2, hr * 0.4 - lw * 0.9, hr * 0.13);
+    ctx.fillRect(-hr * 0.2 + lw * 0.45, hr * 0.44, hr * 0.4 - lw * 0.9, hr * 0.13);
+    ctx.restore();
   }
 }
 
@@ -271,7 +422,8 @@ function drawCat(cx, cy, s, key, o) {
         ctx.stroke();
       });
     }
-    if (mk === "belly") { ctx.fillStyle = C.light; oval(0, bry * 0.45, brx * 0.62, bry * 0.55); ctx.fill(); }
+    if (mk === "belly" || mk === "sparkle") { ctx.fillStyle = C.light; oval(0, bry * 0.45, brx * 0.62, bry * 0.55); ctx.fill(); }
+    if (mk === "sparkle") { ctx.fillStyle = C.light; twinkle(brx * 0.62, -bry * 0.3, s * 0.06); twinkle(-brx * 0.66, -bry * 0.18, s * 0.04); twinkle(brx * 0.3, -bry * 0.62, s * 0.035); }
     if (mk === "patch") { ctx.fillStyle = "#FFCB7A"; oval(brx * 0.5, -bry * 0.35, brx * 0.42, bry * 0.45, 0.5); ctx.fill(); }
     if (mk === "points") { ctx.fillStyle = C.light; oval(0, bry * 0.1, brx * 0.62, bry * 0.66); ctx.fill(); }
     if (whiteParts) { ctx.fillStyle = C.light; oval(lerp(-0.35, 0, w) * brx, bry * 0.4, brx * 0.5, bry * 0.62); ctx.fill(); }
@@ -309,8 +461,9 @@ function drawCat(cx, cy, s, key, o) {
     ctx.lineTo(hx + d * hr * 0.74, tipY + hr * 0.3);
     ctx.lineTo(hx + d * hr * 0.36, hy - hr * 0.78);
     ctx.closePath();
-    ctx.fillStyle = "#FF9DB5"; ctx.fill();
+    ctx.fillStyle = C.earIn || "#FF9DB5"; ctx.fill();
   }
+  if (o.neck) drawNeck(o.neck, hx, hy, hr, false);
   if (C.sprout) {
     ctx.strokeStyle = C.dark; ctx.lineWidth = lw;
     ctx.beginPath(); ctx.moveTo(hx, hy - hr * 0.9); ctx.lineTo(hx, hy - hr * 1.3); ctx.stroke();
@@ -330,7 +483,8 @@ function drawCat(cx, cy, s, key, o) {
   }
   if (mk === "patch") { ctx.fillStyle = "#FFCB7A"; oval(hx + hr * 0.62, hy - hr * 0.42, hr * 0.5, hr * 0.5); ctx.fill(); }
   if (mk === "points") { ctx.fillStyle = C.light; oval(hx, hy + hr * 0.45, hr * 0.62, hr * 0.48); ctx.fill(); }
-  if (mk === "belly") { ctx.fillStyle = C.light; oval(hx, hy + hr * 0.52, hr * 0.5, hr * 0.36); ctx.fill(); }
+  if (mk === "belly" || mk === "sparkle") { ctx.fillStyle = C.light; oval(hx, hy + hr * 0.52, hr * 0.5, hr * 0.36); ctx.fill(); }
+  if (mk === "sparkle") { ctx.fillStyle = C.light; twinkle(hx, hy - hr * 0.5, hr * 0.26); }       // a star on the forehead
   if (whiteParts) {                          // white muzzle; Bean also has a white blaze up the nose
     ctx.fillStyle = C.light;
     oval(hx, hy + hr * 0.6, hr * 0.66, hr * 0.5); ctx.fill();
@@ -378,10 +532,19 @@ function drawCat(cx, cy, s, key, o) {
     ctx.arc(hx + hr * 0.1, hy + hr * 0.5, hr * 0.1, 0, Math.PI * 0.9);
     ctx.stroke();
   }
+  if (o.neck) drawNeck(o.neck, hx, hy, hr, true);
   if (o.hat) drawHat(o.hat, hx, hy, hr);
   ctx.restore();
 }
+// A small four-point sparkle, filled with the current color.
+function twinkle(x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + i * Math.PI / 4, q = i % 2 ? r * 0.4 : r * 1.25; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); }
+  ctx.closePath(); ctx.fill();
+}
+// Only the player's own cat is dressed up.
 const hatFor = key => (key === S.hero ? S.hat : "");
+const neckFor = key => (key === S.hero ? S.neck : "");
 
 /* ---------- a cat hiding under a blanket ---------- */
 function drawBlanket(cx, cy, s, seed) {
@@ -433,6 +596,64 @@ function drawGate(cx, cy, s, key) {
   if (S.shapes) drawShape(key, cx, y, r * 0.55); else paw(cx, y, r * 0.75);
 }
 
+/* ---------- creaky boards ----------
+   A creaky board is a worn wooden plank with a crack: the same warm wood in every chapter,
+   so it never looks like a wall block or a floor tile. Once it breaks it is a dark hole. */
+function drawPlank(x, y, s) {
+  rr(x + 2, y + 2, s - 4, s - 4, s * 0.14); ctx.fillStyle = "#8A5A2E"; ctx.fill();
+  rr(x + 3.5, y + 3.5, s - 7, s - 8.5, s * 0.12); ctx.fillStyle = "#D9A86C"; ctx.fill();
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle = "#A8713F"; ctx.lineWidth = Math.max(1.5, s * 0.035); ctx.lineCap = "round";
+  for (const k of [0.36, 0.66]) { ctx.beginPath(); ctx.moveTo(x, y + s * k); ctx.lineTo(x + s, y + s * k); ctx.stroke(); }
+  ctx.fillStyle = "#B98349";                                  // nail heads
+  for (const [u, v] of [[0.18, 0.2], [0.82, 0.2], [0.18, 0.84], [0.82, 0.84]]) { oval(x + s * u, y + s * v, s * 0.035, s * 0.035); ctx.fill(); }
+  ctx.strokeStyle = "#5C3A1B"; ctx.lineWidth = Math.max(1.8, s * 0.045); ctx.lineJoin = "round";
+  ctx.beginPath();                                            // the crack
+  ctx.moveTo(x + s * 0.2, y + s * 0.5); ctx.lineTo(x + s * 0.38, y + s * 0.44); ctx.lineTo(x + s * 0.47, y + s * 0.56);
+  ctx.lineTo(x + s * 0.62, y + s * 0.47); ctx.lineTo(x + s * 0.8, y + s * 0.55);
+  ctx.moveTo(x + s * 0.47, y + s * 0.56); ctx.lineTo(x + s * 0.5, y + s * 0.7);
+  ctx.stroke();
+  ctx.restore();
+}
+// "open" grows from 0 to 1 just after the board breaks.
+function drawHole(x, y, s, open) {
+  const k = 0.55 + 0.45 * open, m = s * (1 - k) / 2;
+  rr(x + 3 + m, y + 3 + m, s - 6 - 2 * m, s - 6 - 2 * m, s * 0.2); ctx.fillStyle = "#3B2614"; ctx.fill();
+  rr(x + 6 + m, y + 7 + m, s - 12 - 2 * m, s - 12 - 2 * m, s * 0.18); ctx.fillStyle = "#140C14"; ctx.fill();
+  // broken plank ends around the edge
+  ctx.fillStyle = "#B98349";
+  for (const [u, v, w, h] of [[0.12, 0.08, 0.22, 0.1], [0.64, 0.84, 0.24, 0.09], [0.06, 0.6, 0.08, 0.2], [0.86, 0.3, 0.08, 0.18]]) {
+    rr(x + s * u, y + s * v, s * w, s * h, s * 0.03); ctx.fill();
+  }
+}
+
+/* ---------- one-way floor ----------
+   A floor tile in the chapter's colors, tinted a little toward the board color, with a bold
+   chevron in the board color pointing the only way a bed may slide on it. Flat, so it never
+   looks like a raised wall block; light, so it never looks like a hole or a wooden plank.
+   "way": 0 up, 1 down, 2 left, 3 right. "flash" goes from 1 to 0 just after it refused a bed. */
+const WAY_TURN = [-Math.PI / 2, Math.PI / 2, Math.PI, 0];
+function chevron(cx, cy, s, way, fill, edge) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(WAY_TURN[way]);
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.5, -s * 0.72); ctx.lineTo(s * 0.42, 0); ctx.lineTo(-s * 0.5, s * 0.72);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = Math.max(4, s * 0.62); ctx.stroke(); }
+  ctx.strokeStyle = fill; ctx.lineWidth = Math.max(2.6, s * 0.38); ctx.stroke();
+  ctx.restore();
+}
+function drawArrowTile(x, y, s, way, TH, flash, r, c) {
+  rr(x + 1.5, y + 1.5, s - 3, s - 3, s * 0.16);
+  ctx.fillStyle = mix(TH.tiles[(r + c) % 2], TH.tray, 0.14); ctx.fill();
+  if (flash > 0) { ctx.globalAlpha = flash * (0.55 + 0.45 * Math.sin(flash * 18)); ctx.fillStyle = "#FFD86B"; ctx.fill(); ctx.globalAlpha = 1; }
+  // a soft lane mark along the way it goes, then the chevron
+  ctx.save(); ctx.translate(x + s / 2, y + s / 2); ctx.rotate(WAY_TURN[way]);
+  rr(-s * 0.36, -s * 0.07, s * 0.5, s * 0.14, s * 0.07); ctx.fillStyle = mix(TH.tiles[0], TH.tray, 0.32); ctx.fill();
+  ctx.restore();
+  const k = 1 + flash * 0.18;
+  chevron(x + s / 2 + [0, 0, -1, 1][way] * s * 0.06, y + s / 2 + [-1, 1, 0, 0][way] * s * 0.06, s * 0.26 * k, way, flash > 0 ? "#C22B3F" : TH.tray);
+}
+
 /* ---------- beds ---------- */
 function bedPath(ox, oy, cells, inset, radius) {
   const s = cell, has = (r, c) => cells.some(([a, b]) => a === r && b === c);
@@ -458,13 +679,25 @@ function drawBed(bed, lifted, intro) {
   const wake = going ? clamp01(lt / 0.3) : 0;
   const fade = going ? clamp01((lt - 0.65) / 0.3) : 0;
   let ox = gx + (bed.x + bed.nx) * s, oy = gy + (bed.y + bed.ny) * s - fade * s * 0.3;
+  // a little life: a pop when picked up, a squish when put down, a shake when blocked
+  let sx = 1, sy = 1;
+  if (!S.calm) {
+    const up = time - (bed.popT === undefined ? -9 : bed.popT), down = time - (bed.dropT === undefined ? -9 : bed.dropT);
+    const shake = time - (bed.shakeT === undefined ? -9 : bed.shakeT);
+    if (up < 0.22) { const k = Math.sin(up / 0.22 * Math.PI) * 0.08; sx += k; sy += k; }
+    if (down < 0.24) { const k = Math.sin(down / 0.24 * Math.PI) * 0.08; sx += k; sy -= k; }
+    if (shake < 0.3) {
+      const k = Math.sin(shake * 60) * (1 - shake / 0.3) * s * 0.045;
+      ox += k * (bed.shakeX || 0); oy += k * (bed.shakeY || 0);
+    }
+  }
   ctx.save();
   let grow = intro === undefined ? 1 : intro;
   if (going) grow *= 1 + Math.sin(clamp01(lt / 0.3) * Math.PI) * 0.1;
   grow *= 1 + bed.squash * 0.06;
-  if (grow !== 1) {
+  if (grow !== 1 || sx !== 1 || sy !== 1) {
     const [cx, cy] = bedCenter(bed, ox, oy);
-    ctx.translate(cx, cy); ctx.scale(grow, grow); ctx.translate(-cx, -cy);
+    ctx.translate(cx, cy); ctx.scale(grow * sx, grow * sy); ctx.translate(-cx, -cy);
   }
   const alpha = 1 - fade;
   ctx.globalAlpha = alpha;
@@ -484,7 +717,7 @@ function drawBed(bed, lifted, intro) {
     const f = j < done ? bed.fills[j] : null;
     if (f && f.t >= 1) {
       const land = f.t < 1.3 ? Math.sin((f.t - 1) / 0.3 * Math.PI) * 0.14 : 0;        // squash as it lands
-      drawCat(cx, cy + land * s * 0.2, s * 0.84, key, { seed: bed.id * 3 + j, wake, noShadow: true, sx: 1 + land, sy: 1 - land, hat: hatFor(key) });
+      drawCat(cx, cy + land * s * 0.2, s * 0.84, key, { seed: bed.id * 3 + j, wake, noShadow: true, sx: 1 + land, sy: 1 - land, hat: hatFor(key), neck: neckFor(key) });
     } else {
       ctx.globalAlpha = alpha * (S.shapes ? 0.75 : 0.45); ctx.fillStyle = C.bed;
       if (S.shapes) drawShape(key, cx, cy, s * 0.15); else paw(cx, cy, s * 0.24);
