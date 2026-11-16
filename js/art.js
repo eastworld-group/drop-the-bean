@@ -235,12 +235,12 @@ function drawBackground() {
   const kind = TH.motif, span = H + 80, dir = MOTIF_RISES[kind] ? -1.5 : 1;
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   for (let i = 0; i < 10; i++) {
-    const x = ((i * 137 + 20) % 100) / 100 * W + (S.calm ? 0 : Math.sin(time * 0.4 + i * 2.1) * 8);
-    const y = ((((i * 71 + 30) % 100) / 100 * H + time * (4 + i % 3) * dir) % span + span) % span - 40;
+    const x = ((i * 137 + 20) % 100) / 100 * W + (S.calm ? 0 : Math.sin(time * 0.2 + i * 2.1) * 5);
+    const y = ((((i * 71 + 30) % 100) / 100 * H + (S.calm ? 0 : time) * (1.5 + (i % 3) * 0.5) * dir) % span + span) % span - 40;
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(MOTIF_SPINS[kind] ? 0.6 + i + (S.calm || kind === "bean" ? 0 : time * 0.12 * (i % 2 ? 1 : -1)) : Math.sin(i * 1.7) * 0.35);
-    ctx.fillStyle = ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+    ctx.rotate(MOTIF_SPINS[kind] ? 0.6 + i + (S.calm || kind === "bean" ? 0 : time * 0.05 * (i % 2 ? 1 : -1)) : Math.sin(i * 1.7) * 0.35);
+    ctx.fillStyle = ctx.strokeStyle = "rgba(255, 255, 255, 0.26)";
     drawMotif(kind, 13 + (i % 3) * 5);
     ctx.restore();
   }

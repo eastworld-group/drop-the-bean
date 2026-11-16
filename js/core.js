@@ -12,6 +12,7 @@ const CHAPTER_KEYS = ["c_nap", "c_rails", "c_lock", "c_blanket", "c_gate", "c_ho
 const INK = "#252A5C";
 const SOFT = "#5F6AA6";
 const FONT = 'ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif';
+const MEOW_COUNT = 3;                // meow sounds to choose from (MEOW_FILES, further down)
 const LEAVE = 0.95;                 // seconds a full bed takes to wake up, cheer and go
 const lerp = (a, b, v) => a + (b - a) * v;
 const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -104,8 +105,55 @@ const ROOM_ITEMS = [
   { n: 55, id: "y_yarn", spot: "toy", price: 100 }, { n: 56, id: "y_mouse", spot: "toy", price: 250 }, { n: 57, id: "y_track", spot: "toy", price: 900 },
   { n: 58, id: "d_basic", spot: "bowl", price: 120 }, { n: 59, id: "d_double", spot: "bowl", price: 600 }, { n: 60, id: "d_gold", spot: "bowl", price: 3500 },
 ];
+/* ---------- two more rooms: the Kitchen and the Garden ----------
+   Each spot id is used by one room only, so all rooms share one "put" list in the save.
+   Same rule as above: the "n" numbers are fixed. Only add new things at the end. */
+const KITCHEN_SPOTS = ["kwall", "kfloor", "kview", "kshelf", "kpans", "kclock", "kfridge", "kcounter", "kstove", "ktable", "krug", "kbowl"];
+const GARDEN_SPOTS = ["gsky", "gground", "gfence", "glamp", "gtree", "gbird", "gflower", "gbench", "gpond", "ghammock", "gpot", "gtoy"];
+ROOM_ITEMS.push(
+  { n: 61, id: "kw_cream", spot: "kwall", price: 0 }, { n: 62, id: "kw_mint", spot: "kwall", price: 300 }, { n: 63, id: "kw_lemon", spot: "kwall", price: 900 },
+  { n: 64, id: "kw_check", spot: "kwall", price: 1800 }, { n: 65, id: "kw_brick", spot: "kwall", price: 3200 },
+  { n: 66, id: "kf_tile", spot: "kfloor", price: 0 }, { n: 67, id: "kf_wood", spot: "kfloor", price: 400 }, { n: 68, id: "kf_check", spot: "kfloor", price: 1100 },
+  { n: 69, id: "kf_terra", spot: "kfloor", price: 2400 },
+  { n: 70, id: "kv_day", spot: "kview", price: 0 }, { n: 71, id: "kv_rain", spot: "kview", price: 500 }, { n: 72, id: "kv_sunset", spot: "kview", price: 1200 },
+  { n: 73, id: "kv_snow", spot: "kview", price: 3000 },
+  { n: 74, id: "ksh_jars", spot: "kshelf", price: 200 }, { n: 75, id: "ksh_plates", spot: "kshelf", price: 550 }, { n: 76, id: "ksh_herbs", spot: "kshelf", price: 1200 },
+  { n: 77, id: "ksh_teapots", spot: "kshelf", price: 2600 },
+  { n: 78, id: "kp_pans", spot: "kpans", price: 350 }, { n: 79, id: "kp_garlic", spot: "kpans", price: 700 }, { n: 80, id: "kp_copper", spot: "kpans", price: 1500 },
+  { n: 81, id: "kk_round", spot: "kclock", price: 300 }, { n: 82, id: "kk_fish", spot: "kclock", price: 900 }, { n: 83, id: "kk_cat", spot: "kclock", price: 2200 },
+  { n: 84, id: "kr_white", spot: "kfridge", price: 900 }, { n: 85, id: "kr_mint", spot: "kfridge", price: 2500 }, { n: 86, id: "kr_retro", spot: "kfridge", price: 5500 },
+  { n: 87, id: "kc_wood", spot: "kcounter", price: 600 }, { n: 88, id: "kc_blue", spot: "kcounter", price: 1600 }, { n: 89, id: "kc_marble", spot: "kcounter", price: 3800 },
+  { n: 90, id: "ks_white", spot: "kstove", price: 800 }, { n: 91, id: "ks_red", spot: "kstove", price: 2200 }, { n: 92, id: "ks_copper", spot: "kstove", price: 4800 },
+  { n: 93, id: "kt_round", spot: "ktable", price: 500 }, { n: 94, id: "kt_square", spot: "ktable", price: 1300 }, { n: 95, id: "kt_picnic", spot: "ktable", price: 2900 },
+  { n: 96, id: "kru_stripe", spot: "krug", price: 250 }, { n: 97, id: "kru_fish", spot: "krug", price: 700 }, { n: 98, id: "kru_lemon", spot: "krug", price: 1500 },
+  { n: 99, id: "kb_fish", spot: "kbowl", price: 150 }, { n: 100, id: "kb_twin", spot: "kbowl", price: 450 }, { n: 101, id: "kb_stand", spot: "kbowl", price: 1300 },
+  { n: 102, id: "kb_fountain", spot: "kbowl", price: 3800 },
+  { n: 103, id: "gs_day", spot: "gsky", price: 0 }, { n: 104, id: "gs_sunset", spot: "gsky", price: 800 }, { n: 105, id: "gs_night", spot: "gsky", price: 2200 },
+  { n: 106, id: "gs_rainbow", spot: "gsky", price: 4000 },
+  { n: 107, id: "gg_grass", spot: "gground", price: 0 }, { n: 108, id: "gg_clover", spot: "gground", price: 500 }, { n: 109, id: "gg_stone", spot: "gground", price: 1400 },
+  { n: 110, id: "gg_flowers", spot: "gground", price: 2600 },
+  { n: 111, id: "gf_white", spot: "gfence", price: 400 }, { n: 112, id: "gf_wood", spot: "gfence", price: 900 }, { n: 113, id: "gf_hedge", spot: "gfence", price: 2000 },
+  { n: 114, id: "gf_bamboo", spot: "gfence", price: 3500 },
+  { n: 115, id: "gl_bulbs", spot: "glamp", price: 500 }, { n: 116, id: "gl_paper", spot: "glamp", price: 1200 }, { n: 117, id: "gl_star", spot: "glamp", price: 2600 },
+  { n: 118, id: "gt_round", spot: "gtree", price: 1200 }, { n: 119, id: "gt_mango", spot: "gtree", price: 3500 }, { n: 120, id: "gt_cherry", spot: "gtree", price: 6000 },
+  { n: 121, id: "gt_house", spot: "gtree", price: 9000 },
+  { n: 122, id: "gh_box", spot: "gbird", price: 350 }, { n: 123, id: "gh_house", spot: "gbird", price: 900 }, { n: 124, id: "gh_bath", spot: "gbird", price: 1800 },
+  { n: 125, id: "gb_daisy", spot: "gflower", price: 300 }, { n: 126, id: "gb_tulip", spot: "gflower", price: 700 }, { n: 127, id: "gb_sun", spot: "gflower", price: 1500 },
+  { n: 128, id: "gb_rose", spot: "gflower", price: 2800 },
+  { n: 129, id: "gn_wood", spot: "gbench", price: 600 }, { n: 130, id: "gn_iron", spot: "gbench", price: 1600 }, { n: 131, id: "gn_swing", spot: "gbench", price: 3200 },
+  { n: 132, id: "gp_small", spot: "gpond", price: 1200 }, { n: 133, id: "gp_lily", spot: "gpond", price: 3000 }, { n: 134, id: "gp_koi", spot: "gpond", price: 5500 },
+  { n: 135, id: "gm_rope", spot: "ghammock", price: 1500 }, { n: 136, id: "gm_stripe", spot: "ghammock", price: 2800 }, { n: 137, id: "gm_rainbow", spot: "ghammock", price: 5000 },
+  { n: 138, id: "gpt_fern", spot: "gpot", price: 200 }, { n: 139, id: "gpt_cactus", spot: "gpot", price: 450 }, { n: 140, id: "gpt_bamboo", spot: "gpot", price: 1100 },
+  { n: 141, id: "gy_ball", spot: "gtoy", price: 150 }, { n: 142, id: "gy_tunnel", spot: "gtoy", price: 650 }, { n: 143, id: "gy_butterfly", spot: "gtoy", price: 1400 },
+);
+const ALL_SPOTS = ROOM_SPOTS.concat(KITCHEN_SPOTS, GARDEN_SPOTS);
+// A room opens once she has passed this level (counted from 1): the Bedroom at once,
+// the Kitchen at the end of season 1, the Garden at the end of season 3.
+const ROOM_OPEN_AT = [0, 250, 700];
+const roomOpen = i => i === 0 || (i < ROOM_OPEN_AT.length && !!S.stars[ROOM_OPEN_AT[i] - 1]);
 const roomItem = id => ROOM_ITEMS.find(it => it.id === id);
-const ROOM_FREE = { wall: "w_plain", floor: "f_wood", view: "v_day" };      // what these three spots show until she picks
+// what the whole-wall, floor and window spots show until she picks
+const ROOM_FREE = { wall: "w_plain", floor: "f_wood", view: "v_day", kwall: "kw_cream", kfloor: "kf_tile", kview: "kv_day", gsky: "gs_day", gground: "gg_grass" };
 // Keep only things this game knows: owned once each (free ones need no owning), and each
 // placed thing must be hers and belong to that spot.
 function cleanRoom(r) {
@@ -113,13 +161,19 @@ function cleanRoom(r) {
   if (!r || typeof r !== "object") return out;
   for (const id of Array.isArray(r.own) ? r.own : []) { const it = roomItem(id); if (it && it.price > 0 && !out.own.includes(id)) out.own.push(id); }
   const put = r.put && typeof r.put === "object" ? r.put : {};
-  for (const spot of ROOM_SPOTS) {
+  for (const spot of ALL_SPOTS) {
     const it = roomItem(put[spot]);
     if (it && it.spot === spot && (it.price === 0 || out.own.includes(it.id))) out.put[spot] = it.id;
   }
   return out;
 }
-const PAIR = [["#FFC93C", "#8A5A00"],["#FF7EB6", "#A02567"], ["#5FE0C0", "#1E7A62"]];     // lock-and-key pair colors
+/* ---------- seasons ----------
+   The last level of each season (see PROGRESSION.md) is a golden finale: a golden bed on the
+   level page, and double coins the first time. Counted from 1. */
+const SEASON_ENDS = [250, 500, 700, 900, 1100, 1300, 1500, 1700, 1900, 2000];
+const isGolden = i => SEASON_ENDS.includes(i + 1);
+const MAX_CHAPTERS = 80;
+const PAIR =[["#FFC93C", "#8A5A00"],["#FF7EB6", "#A02567"], ["#5FE0C0", "#1E7A62"]];     // lock-and-key pair colors
 /* ---------- chapter looks ----------
    Every chapter (25 levels) has its own colors and its own little shapes drifting
    in the background. All backgrounds stay light, so the dark text is easy to read.
@@ -230,8 +284,16 @@ const SAVE_KEY = "dropthebean.save.v2";
 function freshSave() {
   return { stars: {}, coins: 60, pu: { hint: 3, snooze: 2, treat: 1, hammer: 0 }, hammerGot: false, perfect: {}, hero: "k", cats: [], names: {}, hat: "", hats: [],
     neck: "", necks: [], sound: true, music: true, track: 0, meow: 0, timer: true, shapes: false, calm: false,
-    daily: { last: "", streak: 0 }, setup: false, player: "", room: { own: [], put: {} } };
+    daily: { last: "", streak: 0 }, setup: false, player: "", room: { own: [], put: {} }, roomView: 0,
+    // notes: chapters whose love note she has read. chests: chapters whose treasure she opened.
+    // gift: the daily cat gift (the day it was last opened, how far into the week, whole weeks done).
+    // stats: cats tucked in, seconds played, longest daily streak, gifts opened.
+    notes: [], chests: [], gift: { last: "", day: 0, weeks: 0 }, stats: { cats: 0, time: 0, best: 0, gifts: 0 } };
 }
+// Only the three meows that are kept. A save or code that chose one of the old ones gets Mrow.
+const fixMeow = v => (Number.isInteger(v) && v >= 0 && v < MEOW_COUNT ? v : 0);
+// A list of chapter numbers: whole numbers, each once, in order.
+const chapList = list => (Array.isArray(list) ? list : []).map(Number).filter((n, i, all) => Number.isInteger(n) && n >= 0 && n < MAX_CHAPTERS && all.indexOf(n) === i).sort((a, b) => a - b);
 const starSum = sv => Object.values(sv.stars).reduce((a, b) => a + b, 0);
 // "cats" lists cats that stay hers whatever her star count: the cat she already had
 // as her own before cats needed stars is never taken away.
@@ -245,8 +307,16 @@ function loadSave() {
       Object.assign(base, got);
       base.pu = Object.assign(freshSave().pu, got.pu || {});
       base.daily = Object.assign(freshSave().daily, got.daily || {});
+      base.gift = Object.assign(freshSave().gift, got.gift || {});
+      base.stats = Object.assign(freshSave().stats, got.stats || {});
     }
   } catch (e) { /* private mode or damaged data: start fresh */ }
+  base.meow = fixMeow(base.meow);
+  base.notes = chapList(base.notes); base.chests = chapList(base.chests);
+  for (const k of ["cats", "time", "best", "gifts"]) base.stats[k] = Math.max(0, Number(base.stats[k]) || 0);
+  base.stats.best = Math.max(base.stats.best, base.daily.streak || 0);    // saves from before stats: the streak she has now
+  base.gift = { last: String(base.gift.last || ""), day: Math.max(0, Math.min(7, Math.floor(Number(base.gift.day) || 0))), weeks: Math.max(0, Math.floor(Number(base.gift.weeks) || 0)) };
+  base.roomView = [0, 1, 2].includes(base.roomView) ? base.roomView : 0;
   delete base.theme;                                  // boards used to be chosen by hand: now each chapter has its own look
   for (const k of ["cats", "hats", "necks"]) if (!Array.isArray(base[k])) base[k] = [];
   for (const k of ["stars", "perfect"]) if (!base[k] || typeof base[k] !== "object") base[k] = {};
@@ -271,6 +341,19 @@ const b64 = bytes => btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g,
 const unb64 = str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), ch => ch.charCodeAt(0));
 const codeSum = body => { let sum = 0; for (const ch of body) sum = (sum * 31 + ch.charCodeAt(0)) % 65536; return sum.toString(16).padStart(4, "0"); };
 
+// A set of small whole numbers as bits, and back again.
+function packBits(list) {
+  let n = 0; for (const i of list) n = Math.max(n, i + 1);
+  const a = new Uint8Array(Math.ceil(n / 8));
+  for (const i of list) a[i >> 3] |= 1 << (i & 7);
+  return b64(a);
+}
+function unpackBits(str, max) {
+  const out = [];
+  try { const a = unb64(String(str || "")); for (let i = 0; i < a.length * 8 && i < max; i++) if ((a[i >> 3] >> (i & 7)) & 1) out.push(i); } catch (e) { /* damaged: none */ }
+  return out;
+}
+
 function makeCode() {
   let n = 0, np = 0;
   for (const k in S.stars) n = Math.max(n, Number(k) + 1);
@@ -286,7 +369,14 @@ function makeCode() {
   const own = new Uint8Array(Math.ceil(ROOM_ITEMS.length / 8));
   for (const id of S.room.own) { const it = roomItem(id); if (it) own[it.n >> 3] |= 1 << (it.n & 7); }
   data.rm = b64(own);
-  data.rp = ROOM_SPOTS.map(spot => { const it = roomItem(S.room.put[spot]); return it ? it.n : -1; });
+  const spotNums = list => list.map(spot => { const it = roomItem(S.room.put[spot]); return it ? it.n : -1; });
+  data.rp = spotNums(ROOM_SPOTS);
+  data.rk = spotNums(KITCHEN_SPOTS);                                 // the Kitchen and the Garden, the same way
+  data.rg = spotNums(GARDEN_SPOTS);
+  data.nr = packBits(S.notes);                                       // love notes read, one bit per chapter
+  data.cs = packBits(S.chests);                                      // chapter chests opened
+  data.gf = [S.gift.last, S.gift.day, S.gift.weeks];
+  data.st = [S.stats.cats, Math.floor(S.stats.time), S.stats.best, S.stats.gifts];
   const body = b64(new TextEncoder().encode(JSON.stringify(data)));
   return "BEAN-" + body + "-" + codeSum(body);
 }
@@ -343,16 +433,27 @@ function readCode(text) {
   out.neck = out.necks.includes(d.nk) ? d.nk : "";
   if (Array.isArray(d.d)) out.daily = { last: String(d.d[0] || ""), streak: count(d.d[1], 9999) };
   const x = Array.isArray(d.x) ? d.x : [1, 1, 0, 0, 1, 0, 0];
-  out.sound = !!x[0]; out.music = !!x[1]; out.track = count(x[2], TRACK_FILES.length - 1); out.meow = count(x[3], 5);
+  out.sound = !!x[0]; out.music = !!x[1]; out.track = count(x[2], TRACK_FILES.length - 1);
+  out.meow = fixMeow(count(x[3], 99));                // a meow that was taken out comes back as Mrow
   out.timer = !!x[4]; out.shapes = !!x[5]; out.calm = !!x[6];
-  // Older codes have no room ("rm", "rp"): the room starts empty. Unknown numbers are dropped.
+  // Older codes have no room ("rm", "rp"): the room starts empty. Codes from before the Kitchen
+  // and the Garden have no "rk" or "rg": those rooms start empty. Unknown numbers are dropped.
   try {
     const bits = unb64(String(d.rm || "")), room = { own: [], put: {} };
     for (const it of ROOM_ITEMS) if ((bits[it.n >> 3] >> (it.n & 7)) & 1) room.own.push(it.id);
-    const rp = Array.isArray(d.rp) ? d.rp : [];
-    ROOM_SPOTS.forEach((spot, i) => { const it = ROOM_ITEMS.find(q => q.n === rp[i]); if (it) room.put[spot] = it.id; });
+    for (const [list, nums] of [[ROOM_SPOTS, d.rp], [KITCHEN_SPOTS, d.rk], [GARDEN_SPOTS, d.rg]]) {
+      const rp = Array.isArray(nums) ? nums : [];
+      list.forEach((spot, i) => { const it = ROOM_ITEMS.find(q => q.n === rp[i]); if (it) room.put[spot] = it.id; });
+    }
     out.room = cleanRoom(room);
   } catch (e) { out.room = { own: [], put: {} }; }
+  // Older codes have none of these: no notes read, no chests opened, a fresh gift week, zero counts.
+  out.notes = unpackBits(d.nr, MAX_CHAPTERS);
+  out.chests = unpackBits(d.cs, MAX_CHAPTERS);
+  const gf = Array.isArray(d.gf) ? d.gf : [];
+  out.gift = { last: /^\d{4}-\d\d-\d\d$/.test(String(gf[0] || "")) ? String(gf[0]) : "", day: count(gf[1], 7), weeks: count(gf[2], 99999) };
+  const st = Array.isArray(d.st) ? d.st : [];
+  out.stats = { cats: count(st[0], 1e9), time: count(st[1], 1e9), best: Math.max(count(st[2], 99999), out.daily.streak), gifts: count(st[3], 1e9) };
   return out;
 }
 
@@ -400,6 +501,7 @@ function dailyStreak() {
 function markDaily() {
   if (dailyDone()) return false;
   S.daily = Object.assign({}, S.daily, { last: todayKey(), streak: dailyStreak() + 1 });
+  S.stats.best = Math.max(S.stats.best, S.daily.streak);
   return true;
 }
 
@@ -420,7 +522,7 @@ const WORDS = {
     need_bed: "{0} cats still need a bed.", need_bed1: "1 cat still needs a bed.", use_snooze: "Snooze: 30 more seconds",
     s_sound: "Sound: {0}", s_music: "Music: {0}", m_0: "Lullaby", m_1: "Sunny Window", m_2: "Tiptoe", m_3: "Dreamy", m_4: "Zoomies", m_5: "Hot Springs Town", m_6: "Happy Adventure", m_7: "Flowerbed Fields", m_8: "Catmint", m_9: "Cozy Puzzle", m_10: "Hush Hamlet",
     pick_music: "Music", pick_meow: "Meow sound",
-    s_meow: "Meow: {0}", w_0: "Mrow", w_1: "Soft mew", w_2: "Kitten", w_3: "Siamese", w_4: "House cat", w_5: "Young cat", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
+    s_meow: "Meow: {0}", w_0: "Mrow", w_1: "Soft mew", w_2: "Kitten", s_timer: "Timer: On", s_timer_off: "Timer: Off (relaxed)",
     s_shapes: "Color shapes: {0}", s_calm: "Calm motion: {0}", on: "On", off: "Off",
     next_cat: "Next cat: {0} at {1} stars", all_cats: "All cats are yours!", cat_locked: "{0} joins you at {1} stars",
     stars_of: "{0} of {1} stars",
@@ -472,6 +574,11 @@ const WORDS = {
     stuck: "The beds can't reach their cats now.", stuck2: "Undo or restart.",
     room: "My room", room_tip: "Tap a spot to decorate", room_none: "Nothing here", in_room: "In your room",
     chapters: "Chapters", chapter_n: "Chapter {0}", where: "Where I am", you_here: "You are here",
+    golden: "Golden bed: double coins!", new_room: "New room: the {0}!", note_new: "A note for you",
+    note_title: "A note for you", note_from: "Chapter {0}: {1}",
+    album: "Album", tab_pics: "Pictures", tab_stickers: "Stickers", tab_stats: "My stats",
+    page_of: "{0} of {1}", pic_locked: "Finish chapter {0} to paint this one",
+    chest_title: "Treasure!", chest_got: "For your cat: {0}", chest_tip: "3 stars on every level of a chapter opens its chest",
   },
 };
 function t(key) {
@@ -518,10 +625,11 @@ const VOICE = { k: 1.0, g: 1.18, o: 0.86, b: 0.95, w: 1.3, p: 1.42, m: 1.1, a: 1
 
 // A meow, built from scratch: a buzzy note that rises ("me") then falls ("ow"),
 // pushed through a filter that slides from a bright "e" sound to a round "o" sound.
-// Six recordings to choose from in Settings (see CREDITS.md). The first is the owner's own pick: it is the default.
-const MEOW_FILES = ["sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav", "sounds/meow-siamese.wav", "sounds/meow-house.wav", "sounds/meow-young.wav"];
-const MEOW_GAIN = [0.8, 0.6, 0.45, 0.7, 0.7, 0.6];
-const MEOW_SPREAD = [0.1, 0.4, 0.4, 0.4, 0.4, 0.4];      // how much each cat's voice shifts the pitch (the default stays close to the original)
+// Three recordings to choose from in Settings (see CREDITS.md). The first is the owner's own pick: it is the default.
+// (Three more recordings are still in the sounds folder, but no longer offered.)
+const MEOW_FILES = ["sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav"];
+const MEOW_GAIN = [0.8, 0.6, 0.45];
+const MEOW_SPREAD = [0.1, 0.4, 0.4];      // how much each cat's voice shifts the pitch (the default stays close to the original)
 const meowBuffers = [];
 function loadMeows() {
   MEOW_FILES.forEach((url, i) => {

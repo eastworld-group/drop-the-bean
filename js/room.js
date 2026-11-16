@@ -29,6 +29,12 @@ Object.assign(WORDS.en, {
   ri_c_round: "Round cushion", ri_c_heart: "Heart cushion", ri_c_star: "Star cushion", ri_c_bean: "Bean bag",
   ri_y_yarn: "Yarn ball", ri_y_mouse: "Toy mouse", ri_y_track: "Ball track",
   ri_d_basic: "Blue bowl", ri_d_double: "Two bowls", ri_d_gold: "Golden bowl",
+  room_0: "Bedroom", room_1: "Kitchen", room_2: "Garden", room_locked: "The {0} opens after level {1}",
+  gift_week: "Gift week", gift_from: "A gift from {0}!", gift_day: "Day {0} of 7", gift_big: "Day 7: a big gift!",
+  gift_coins: "+{0} coins", gift_pu: "1 {0}", gift_item: "For your room: {0}", gift_item_tip: "Tap its spot in the {0} to put it out.",
+  cal_title: "Gift week", cal_day: "Day {0}", cal_today: "Today", cal_next: "Tomorrow",
+  cal_tip: "A cat brings a gift each day. Missed a day? Your week just waits for you.", cal_tip2: "Day 7 is a big one.",
+  open_gift: "Tap the gift",
 });
 
 const RW = 360, RH = 440, WALL_Y = 290;
@@ -43,7 +49,7 @@ const SPOT_AT = {
   view:  { x: 262, y: 107, box: [-58, -62, 116, 124], layer: 0 },
   pic:   { x: 84, y: 64, box: [-42, -34, 84, 68], layer: 1 },
   shelf: { x: 90, y: 160, box: [-56, -52, 112, 64], layer: 1 },
-  hang:  { x: 168, y: 0, box: [-30, 0, 60, 100], layer: 1 },
+  hang:  { x: 168, y: 0, box: [-30, 0, 60, 100], layer: 1, plusY: -14 },
   sill:  { x: 268, y: 170, box: [-30, -44, 60, 46], layer: 1 },
   lamp:  { x: 168, y: 316, box: [-30, -128, 60, 132], layer: 2, depth: 316 },
   plant: { x: 32, y: 324, box: [-32, -116, 64, 120], layer: 2, depth: 324 },
@@ -55,8 +61,16 @@ const SPOT_AT = {
   toy:   { x: 186, y: 432, box: [-26, -28, 52, 32], layer: 2, depth: 432 },
   bowl:  { x: 306, y: 432, box: [-30, -26, 60, 30], layer: 2, depth: 432 },
 };
-// The three spots that fill the whole wall, floor and window get a square swatch in the picker.
+// The spots that fill the whole wall, floor, sky and window get a square swatch in the picker.
 const SWATCH = { wall: 1, floor: 1, view: 1 };
+const WINDOW_SPOTS = { view: 1 };                    // swatches drawn as a little window
+/* ---------- the rooms ----------
+   Each room: its spots, where its wall meets its floor (cats above it are "up high"), how to
+   draw its fixed parts, and where cats can be. The Kitchen and the Garden add themselves in
+   js/kitchen.js and js/garden.js. */
+const ROOMS = [];
+const curRoom = () => ROOMS[roomOpen(S.roomView) && ROOMS[S.roomView] ? S.roomView : 0];
+const roomOfSpot = spot => Math.max(0, ROOMS.findIndex(R => R.spots.includes(spot)));
 const roomPut = spot => S.room.put[spot] || ROOM_FREE[spot] || "";
 const roomOwns = id => { const it = roomItem(id); return !!it && (it.price === 0 || S.room.own.includes(id)); };
 
@@ -624,10 +638,11 @@ function drawThingPreview(spot, id, cx, cy, size) {
   if (SWATCH[spot]) {
     const k = size / 100;
     ctx.translate(cx, cy); ctx.scale(k, k);
-    if (spot === "view") drawWindow(id, -40, -40, 80, 80);
+    if (WINDOW_SPOTS[spot]) drawWindow(id, -40, -40, 80, 80);
     else { rr(-46, -46, 92, 92, 14); ctx.save(); ctx.clip(); PATTERNS[id](-46, -46, 92, 92); ctx.restore(); rr(-46, -46, 92, 92, 14); fs(null, "#C9B8A6", 2.4); }
   } else {
     const [bx, by, bw, bh] = PREVIEW_BOX[id] || SPOT_AT[spot].box, k = size / Math.max(bw, bh);
+    ctx.beginPath(); ctx.rect(cx - size * 0.78, cy - size * 0.72, size * 1.56, size * 1.3); ctx.clip();   // wide things stay in their tile
     ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-(bx + bw / 2), -(by + bh / 2));
     THINGS[id]();
   }
@@ -640,7 +655,7 @@ function drawThingPreview(spot, id, cx, cy, size) {
    A cat rests a while (asleep or sitting up), then sometimes walks or hops to a free perch.
    "sleep" perches are where cats like to nap; "play" makes them bounce about. */
 const FLOOR_SPOTS = [[108, 334], [214, 336], [262, 322], [96, 424], [244, 428], [154, 344], [294, 372], [74, 352]];
-function roomPerches() {
+function bedroomPerches() {
   const out = FLOOR_SPOTS.map(([x, y]) => ({ x, y, depth: y, sleep: 0.35 }));
   out.push({ x: 226, y: SPOT_AT.sill.y, depth: 200, sleep: 0.3, high: true });
   const at = s => SPOT_AT[s], put = s => S.room.put[s];
@@ -654,15 +669,16 @@ function roomPerches() {
   for (const [dx, dy] of tops) out.push({ x: tr.x + dx, y: tr.y + dy, depth: tr.depth + 1, sleep: 0.5, high: true });
   return out;
 }
+ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase, perches: bedroomPerches });
 let roomCats = [], roomSig = "", roomFx = [];
 function roomCatKeys() { return [S.hero].concat(HEROES.filter(k => k !== S.hero && catOpen(k))); }
 // Called every frame on the room screen: if her cats or her room changed, everyone finds a place again.
 function syncRoom() {
-  const keys = roomCatKeys(), sig = keys.join("") + "|" + ROOM_SPOTS.map(s => S.room.put[s] || "").join(",");
+  const R = curRoom(), keys = roomCatKeys(), sig = R.id + "|" + keys.join("") + "|" + R.spots.map(s => S.room.put[s] || "").join(",");
   if (sig === roomSig) return;
-  const fresh = !roomSig;
+  const fresh = !roomSig || roomSig.split("|")[0] !== R.id;      // a new room: everyone is just there
   roomSig = sig;
-  const perches = roomPerches(), old = roomCats;
+  const perches = R.perches(), old = fresh ? [] : roomCats;
   roomCats = [];
   // the nicest places first: her own cat always takes the best one (so a new bed gets tried out
   // at once), the others pick among the next few
@@ -684,17 +700,18 @@ function syncRoom() {
   roomCats.perches = perches;
 }
 function startWalk(cat, to) {
-  const d = Math.hypot(to.x - cat.x, to.y - cat.y);
-  const high = to.y < WALL_Y + 20 || cat.y < WALL_Y + 20;
+  const d = Math.hypot(to.x - cat.x, to.y - cat.y), wy = curRoom().wallY;
+  const high = to.y < wy + 20 || cat.y < wy + 20;
   cat.move = { x0: cat.x, y0: cat.y, d0: cat.depth, x1: to.x, y1: to.y, d1: to.depth, t: 0,
     dur: Math.max(0.5, Math.min(3, d / 70)), h: high ? 14 + Math.abs(to.y - cat.y) * 0.4 : 0 };
   if (Math.abs(to.x - cat.x) > 1) cat.face = to.x > cat.x ? 1 : -1;
 }
 function roomUpdate(dt) {
   syncRoom();
-  const perches = roomCats.perches || [];
+  const perches = roomCats.perches || [], holder = giftReady() ? giftCatKey() : "";
   for (const cat of roomCats) {
     const at = perches[cat.p];
+    if (cat.key === holder && !cat.move) { cat.pose = "sit"; cat.until = time + 2; }    // the cat with today's gift waits for her
     if (cat.move) {
       const m = cat.move;
       m.t += dt;
@@ -720,6 +737,52 @@ function roomUpdate(dt) {
   for (const f of roomFx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; }
   roomFx = roomFx.filter(f => f.life > 0);
 }
+/* ---------- the daily cat gift ----------
+   Once a day one of her cats waits in the room with a small present. Tapping it opens it.
+   The gifts count up a week of 7; day 7 is a bigger present. Missing a day takes nothing
+   away: the week just carries on from where she is. */
+const giftReady = () => S.gift.last !== todayKey();
+function giftCatKey() {
+  const keys = roomCatKeys();
+  let h = 7;
+  for (const ch of todayKey()) h = (h * 31 + ch.charCodeAt(0)) % 100003;
+  return keys[h % keys.length];
+}
+// Which day of the week the next gift is (1 to 7).
+const giftDayNext = () => (S.gift.day >= 7 ? 1 : S.gift.day + 1);
+const pickOne = list => list[Math.floor(Math.random() * list.length)];
+// What is in the box. Days 1 to 6: usually coins (20 to 60), sometimes a powerup (22 in 100),
+// rarely a thing for a room she has opened and does not own yet, up to 1500 coins (8 in 100).
+// Day 7: 150 coins and a powerup, and 3 times in 10 also a room thing up to 3000 coins.
+function rollGift(day) {
+  const out = { coins: 0, pu: "", item: "" };
+  const pus = POWERUPS.filter(p => puOpen(p.id)).map(p => p.id);
+  const items = cap => ROOM_ITEMS.filter(it => it.price > 0 && it.price <= cap && !S.room.own.includes(it.id) && roomOpen(roomOfSpot(it.spot)));
+  if (day === 7) {
+    out.coins = 150; out.pu = pickOne(pus);
+    if (Math.random() < 0.3) { const list = items(3000); if (list.length) out.item = pickOne(list).id; }
+    return out;
+  }
+  const r = Math.random();
+  if (r < 0.08) { const list = items(1500); if (list.length) { out.item = pickOne(list).id; return out; } }
+  if (r < 0.3) { out.pu = pickOne(pus); return out; }
+  out.coins = 20 + 5 * Math.floor(Math.random() * 9);
+  return out;
+}
+function openGift() {
+  if (!giftReady() || overlay) return;
+  const day = giftDayNext(), key = giftCatKey(), got = rollGift(day);
+  S.coins += got.coins;
+  if (got.pu) S.pu[got.pu]++;
+  if (got.item && !S.room.own.includes(got.item)) S.room.own.push(got.item);
+  S.gift = { last: todayKey(), day, weeks: S.gift.weeks + (day === 7 ? 1 : 0) };
+  S.stats.gifts++;
+  save();
+  sfx.magic(); if (got.coins) sfx.coin();
+  const cat = roomCats.find(c => c.key === key);
+  if (cat) cat.perk = time + 3;
+  overlay = { kind: "gift", t: 0, delay: 0, at: time, day, key, got };
+}
 const roomBusy = () => roomCats.some(c => c.move || Math.abs(c.wake - (c.move || time < c.perk || c.pose === "sit" ? 1 : 0)) > 0.02) || roomFx.length > 0;
 // Tapping a cat wakes it up for a moment, and it says hello.
 function petCat(cat) {
@@ -732,18 +795,43 @@ function petCat(cat) {
 const CAT_S = 42;                                         // a cat's size in room units
 
 /* ---------- the room screen ---------- */
+// A small wrapped present, standing on x, y (in whatever units are in use). Day 7's is golden.
+function drawPresent(x, y, s, big) {
+  const box = big ? ["#FFD23F", "#B8860B", "#FF5C8A"] : ["#FF8FB3", "#B02567", "#FFD23F"];
+  rr(x - s / 2, y - s * 0.78, s, s * 0.78, s * 0.1); fs(box[0], box[1], Math.max(1.5, s * 0.07));
+  rr(x - s * 0.6, y - s * 0.96, s * 1.2, s * 0.24, s * 0.08); fs(box[0], box[1], Math.max(1.5, s * 0.07));
+  ctx.fillStyle = box[2]; ctx.fillRect(x - s * 0.08, y - s * 0.95, s * 0.16, s * 0.93);
+  for (const d of [-1, 1]) { oval(x + d * s * 0.2, y - s * 1.06, s * 0.2, s * 0.12, d * 0.5); fs(box[2], box[1], Math.max(1.2, s * 0.05)); }
+}
+// The row of rooms at the top of My room. A room not open yet says when it opens.
+function drawRoomTabs(y) {
+  const tw = Math.max(64, Math.min(110, (W - 32 - 16) / 3));
+  ROOMS.forEach((R, i) => {
+    const x = W / 2 + (i - (ROOMS.length - 1) / 2) * (tw + 8) - tw / 2, open = roomOpen(i);
+    pillButton(x, y, tw, 30, t("room_" + i), () => {
+      if (!open) { toast(t("room_locked", t("room_" + i), ROOM_OPEN_AT[i])); sfx.no(); return; }
+      if (S.roomView !== i) { S.roomView = i; roomSig = ""; save(); }
+    }, open && curRoom() === R, { fill: open ? "#FFFFFF" : "rgba(255, 255, 255, 0.5)", text: 0.44 });
+    if (!open) {                                              // a small padlock
+      const lx = x + tw - 13, ly = y + 15;
+      ctx.strokeStyle = SOFT; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(lx, ly - 2, 3.2, Math.PI, 0); ctx.stroke();
+      rr(lx - 4.5, ly - 2, 9, 7, 2); ctx.fillStyle = SOFT; ctx.fill();
+    }
+  });
+}
 let roomAt = { k: 1, ox: 0, oy: 0 };
 function drawRoomScreen() {
-  const s = safeArea();
+  const s = safeArea(), R = curRoom();
   roundButton(16, topY + 6, 44, "back", () => go("home"));
   coinPill(W - 16 - 86, topY + 11);
   fitLabel(t("room"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
-  fitLabel(t("room_tip"), W / 2, topY + 64, 13, W - 40, SOFT, 700);
-  const top = topY + 78, bottom = H - s.b - 72, availH = Math.max(60, bottom - top);
+  drawRoomTabs(topY + 56);
+  const top = topY + 98, bottom = H - s.b - 72, availH = Math.max(60, bottom - top);
   const k = Math.max(0.2, Math.min((W - 20) / RW, availH / RH));
   const ox = (W - RW * k) / 2, oy = top + Math.max(0, (availH - RH * k) * 0.3);
   roomAt = { k, ox, oy };
   syncRoom();
+  const holder = giftReady() ? giftCatKey() : "", big = giftDayNext() === 7;
 
   // the room itself, in room units
   rr(ox - 5, oy - 5 + 6, RW * k + 10, RH * k + 10, 24); ctx.fillStyle = "rgba(20, 28, 90, 0.22)"; ctx.fill();
@@ -751,19 +839,20 @@ function drawRoomScreen() {
   ctx.save();
   ctx.translate(ox, oy); ctx.scale(k, k);
   rr(0, 0, RW, RH, 20 / k); ctx.clip();
-  drawRoomBase();
-  for (const spot of ROOM_SPOTS) if (SPOT_AT[spot].layer === 1 && S.room.put[spot]) drawThing(spot, S.room.put[spot]);
+  R.base();
+  for (const spot of R.spots) if (SPOT_AT[spot].layer === 1 && S.room.put[spot]) drawThing(spot, S.room.put[spot]);
   // floor things and cats, from back to front
   const list = [];
-  for (const spot of ROOM_SPOTS) if (SPOT_AT[spot].layer === 2 && S.room.put[spot]) list.push({ depth: SPOT_AT[spot].depth, spot });
+  for (const spot of R.spots) if (SPOT_AT[spot].layer === 2 && S.room.put[spot]) list.push({ depth: SPOT_AT[spot].depth, spot });
   for (const cat of roomCats) list.push({ depth: cat.depth, cat });
   list.sort((a, b) => a.depth - b.depth);
   for (const it of list) {
     if (it.spot) { drawThing(it.spot, S.room.put[it.spot]); continue; }
     const c = it.cat, awake = c.wake > 0.5;
     drawCat(c.x, c.y - CAT_S * 0.37, CAT_S, c.key, { seed: c.seed, wake: c.wake, hat: hatFor(c.key), neck: neckFor(c.key),
-      still: !(c.move || (awake && (roomCats.perches[c.p] || {}).play)), sx: c.face > 0 ? -1 : 1, sy: 1, noShadow: c.y < WALL_Y });
-    if (!awake && !S.calm) {                                        // little z's while asleep
+      still: !(c.move || (awake && (roomCats.perches[c.p] || {}).play)), sx: c.face > 0 ? -1 : 1, sy: 1, noShadow: c.y < R.wallY });
+    if (c.key === holder && !c.move) drawPresent(c.x - c.face * 20, c.y + 2, big ? 24 : 18, big);   // today's gift, at its paws
+    else if (!awake && !S.calm) {                                   // little z's while asleep
       const zt = ((time + c.seed) * 0.45) % 1;
       ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.8;
       label("z", c.x + 14 + zt * 6, c.y - CAT_S * 0.75 - zt * 12, Math.round(10 + zt * 5), INK, 900);
@@ -772,30 +861,35 @@ function drawRoomScreen() {
   }
   for (const f of roomFx) { ctx.globalAlpha = clamp01(f.life / f.max); ctx.fillStyle = "#FF5C8A"; drawHeart(f.x, f.y, 12); ctx.globalAlpha = 1; }
   // empty spots wear a small "+" so she knows they can be tapped
-  if (!overlay) for (const spot of ROOM_SPOTS) {
+  if (!overlay) for (const spot of R.spots) {
     if (SWATCH[spot] || S.room.put[spot]) continue;
     const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
-    const mx = at.x + bx + bw / 2, my = at.y + by + bh / 2 + (spot === "hang" ? -14 : 0);
-    const beat = S.calm ? 0 : Math.sin(time * 3 + mx) * 0.08;
+    const mx = at.x + bx + bw / 2, my = at.y + by + bh / 2 + (at.plusY || 0);
     ctx.globalAlpha = 0.9;
-    oval(mx, my, 11 * (1 + beat), 11 * (1 + beat)); fs("rgba(255, 255, 255, 0.9)", "#8FB4E3", 2.4);
+    oval(mx, my, 11, 11); fs("rgba(255, 255, 255, 0.9)", "#8FB4E3", 2.4);
     line([[mx - 5, my], [mx + 5, my]], SOFT, 3); line([[mx, my - 5], [mx, my + 5]], SOFT, 3);
     ctx.globalAlpha = 1;
   }
   ctx.restore();
 
-  // tapping: spots first (the big wall and floor at the bottom), then cats on top
-  for (const spot of ROOM_SPOTS) {
+  // tapping: spots first (the big wall and floor at the bottom), then cats on top, then the gift
+  for (const spot of R.spots) {
     const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
     buttons.push({ x: ox + (at.x + bx) * k, y: oy + (at.y + by) * k, w: bw * k, h: bh * k, onTap: () => openPicker(spot) });
   }
   for (const c of roomCats) {
-    const r = CAT_S * 0.5 * k;
-    buttons.push({ x: ox + c.x * k - r, y: oy + (c.y - CAT_S * 0.37) * k - r * 1.1, w: r * 2, h: r * 2, onTap: () => petCat(c) });
+    const r = CAT_S * 0.5 * k, gift = c.key === holder && !c.move;
+    buttons.push({ x: ox + c.x * k - r, y: oy + (c.y - CAT_S * 0.37) * k - r * 1.1, w: r * 2, h: r * 2, onTap: () => (gift ? openGift() : petCat(c)) });
+    if (gift) {
+      const gr = Math.max(22, 22 * k), gx0 = ox + (c.x - c.face * 20) * k, gy0 = oy + (c.y - 8) * k;
+      buttons.push({ x: gx0 - gr, y: gy0 - gr, w: gr * 2, h: gr * 2, onTap: openGift });
+    }
   }
+  if (holder && !overlay) fitLabel(t("open_gift"), W / 2, Math.min(H - s.b - 72, oy + RH * k + 18), 12, W - 40, SOFT, 800);
 
-  const pw = Math.min(260, W - 72);
-  pillButton(W / 2 - pw / 2, H - s.b - 62, pw, 46, t("powerups"), () => go("shop"), false, { fill: "#FFFFFF" });
+  const bw = Math.min(170, (W - 32 - 10) / 2);
+  pillButton(W / 2 - bw - 5, H - s.b - 62, bw, 46, t("gift_week"), () => { overlay = { kind: "calendar", t: 1, delay: 0, at: time }; }, false, { fill: "#FFFFFF" });
+  pillButton(W / 2 + 5, H - s.b - 62, bw, 46, t("powerups"), () => go("shop"), false, { fill: "#FFFFFF" });
 }
 
 /* ---------- the picker for one spot ---------- */
@@ -813,7 +907,6 @@ function pickThing(spot, id) {
   askBuy({ name, price: it.price, pic: ["room", id] }, () => {
     if (!S.room.own.includes(id)) S.room.own.push(id);
     placeThing(spot, id);
-    toast(t("bought_item", name));
   });
 }
 function drawRoomPick() {
@@ -850,4 +943,66 @@ function drawRoomPick() {
   });
   pillButton(x + 24, y + ch - 62, cw - 48, 46, t("done"), () => { overlay = null; }, true);
   if (time - o.at < 0.25) buttons = [];                                 // the tap that opened it can't also choose
+}
+
+/* ---------- the gift card: what was in today's present ---------- */
+function drawGiftCard() {
+  const o = overlay, g = o.got;
+  buttons = [];
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.max(220, Math.min(310, W - 40)), ch = 316;
+  const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
+  const pop = S.calm ? 1 : easeOutBack(clamp01((time - o.at) / 0.35));
+  ctx.save(); ctx.translate(W / 2, y + ch / 2); ctx.scale(0.85 + 0.15 * pop, 0.85 + 0.15 * pop); ctx.translate(-W / 2, -y - ch / 2);
+  card(x, y, cw, ch);
+  fitLabel(t("gift_from", catName(o.key)), W / 2, y + 34, 21, cw - 30, INK, 900);
+  fitLabel(o.day === 7 ? t("gift_big") : t("gift_day", o.day), W / 2, y + 58, 13, cw - 30, SOFT, 800);
+  drawCat(W / 2 - 46, y + 118, 62, o.key, { wake: 1, still: true, noShadow: true, seed: 4, hat: hatFor(o.key), neck: neckFor(o.key) });
+  // what was inside, next to the cat
+  const px = W / 2 + 40, py = y + 116, lines = [];
+  ctx.fillStyle = "#EEF3FF"; oval(px, py, 34, 34); ctx.fill();
+  if (g.item) { drawThingPreview(roomItem(g.item).spot, g.item, px, py, 54); }
+  else if (g.pu) drawIcon(PU_ICON[g.pu][0], px, py, 1.5, PU_ICON[g.pu][1]);
+  else drawCoin(px, py, 18);
+  if (g.coins) lines.push([t("gift_coins", g.coins), "#B8730A"]);
+  if (g.pu) lines.push([t("gift_pu", t("pu_" + g.pu)), INK]);
+  if (g.item) lines.push([t("gift_item", t("ri_" + g.item)), INK]);
+  lines.forEach(([text, col], i) => fitLabel(text, W / 2, y + 176 + i * 22, 16, cw - 30, col, 800));
+  if (g.item) fitLabel(t("gift_item_tip", t("room_" + roomOfSpot(roomItem(g.item).spot))), W / 2, y + 176 + lines.length * 22, 12, cw - 30, SOFT, 700);
+  pillButton(x + 28, y + ch - 66, cw - 56, 48, t("done"), () => { overlay = null; }, true);
+  ctx.restore();
+  if (time - o.at < 0.3) buttons = [];                                  // the tap that opened it can't also close it
+}
+
+/* ---------- the gift week: 7 days, day 7 a big present ---------- */
+function drawCalendar() {
+  const o = overlay;
+  buttons = [];
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.max(220, Math.min(330, W - 32)), gap = 8, bs = Math.floor((cw - 40 - 3 * gap) / 4);
+  const ch = 60 + 2 * (bs + 18) + gap + 112;
+  const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
+  card(x, y, cw, ch);
+  label(t("cal_title"), W / 2, y + 34, 22, INK, 900);
+  // A finished week shows full until the next gift is ready; then a new week starts.
+  const shown = S.gift.day >= 7 && giftReady() ? 0 : S.gift.day, ready = giftReady();
+  for (let i = 0; i < 7; i++) {
+    const row = i < 4 ? 0 : 1, col = i < 4 ? i : i - 4, wide = i === 6;
+    const bx = x + 20 + col * (bs + gap), by = y + 58 + row * (bs + 18 + gap), bw = wide ? bs * 2 + gap : bs, bh = bs + 18;
+    const done = i < shown, next = i === shown;
+    rr(bx, by, bw, bh, 14); ctx.fillStyle = done ? "#E3F5DC" : next ? "#FFF0B3" : "#F1F5FF"; ctx.fill();
+    if (next) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 2.5; ctx.stroke(); }
+    label(t("cal_day", i + 1), bx + bw / 2, by + 12, 11, done ? "#2F7D32" : INK, 800);
+    const cx = bx + bw / 2, cy = by + bh - 14;
+    if (done) {                                               // opened: a tick
+      ctx.strokeStyle = "#2F9E5B"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath(); ctx.moveTo(cx - 9, cy - 10); ctx.lineTo(cx - 2, cy - 3); ctx.lineTo(cx + 10, cy - 17); ctx.stroke();
+    } else drawPresent(cx, cy, wide ? Math.min(34, bs * 0.5) : Math.min(24, bs * 0.4), wide);
+    if (next) fitLabel(ready ? t("cal_today") : t("cal_next"), cx, by + 26, 10, bw - 6, "#9C3A00", 800);
+  }
+  const ty = y + 58 + 2 * (bs + 18 + gap) + 10;
+  fitLabel(t("cal_tip"), W / 2, ty, 12, cw - 28, SOFT, 700);
+  fitLabel(t("cal_tip2"), W / 2, ty + 17, 12, cw - 28, SOFT, 700);
+  pillButton(x + 24, y + ch - 60, cw - 48, 44, t("done"), () => { overlay = null; }, true);
+  if (time - o.at < 0.25) buttons = [];
 }

@@ -105,7 +105,8 @@ function update(dt) {
   }
   if (hinting && guideIdx >= guideRuns.length) hinting = false;
 
-  if (timerOn && !overlay && !paused && !aim && !thinking && S.timer) {  // the clock waits while she picks a target or while a hint thinks
+  if (!overlay && !paused && !document.hidden) S.stats.time += dt;     // time played (saved with the next save)
+  if (timerOn && !overlay && !paused && !aim && !thinking && S.timer) {  // the clock waits while she picks a target, or while a hint thinks
     timeLeft -= dt;
     if (timeLeft <= 10 && Math.ceil(timeLeft) !== lastTick) { lastTick = Math.ceil(timeLeft); if (timeLeft > 0) sfx.tick(); }
     if (timeLeft <= 0) { timeLeft = 0; finish("lose", 0.2); }
@@ -127,7 +128,7 @@ function update(dt) {
     else {
       if (!overlay.rang && (overlay.kind === "win" || overlay.kind === "lose")) {
         overlay.rang = true;
-        if (overlay.kind === "win") { sfx.win(); throwConfetti(); if (overlay.coins) sfx.coin(); } else sfx.lose();
+        if (overlay.kind === "win") { sfx.win(); if (overlay.party) throwConfetti(); else softSparkle(); if (overlay.coins) sfx.coin(); } else sfx.lose();
       }
       overlay.t += dt;
       if (overlay.kind === "win") {                   // each star makes a small sound as it lands
@@ -136,8 +137,8 @@ function update(dt) {
       }
     }
   }
-  for (const c of confetti) { c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.spin * dt; }
-  confetti = confetti.filter(c => c.y < H + 30);
+  for (const c of confetti) { c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.spin * dt; if (c.soft) c.life -= dt; }
+  confetti = confetti.filter(c => c.y < H + 30 && (!c.soft || c.life > 0));
 }
 
 /* ---------- one picture ---------- */
@@ -155,6 +156,7 @@ function render() {
   else if (screen === "backup") drawBackup();
   else if (screen === "room") drawRoomScreen();
   else if (screen === "chapters") drawChapters();
+  else if (screen === "album") drawAlbum();
   else drawShop();
   if (overlay && overlay.delay <= 0) drawOverlay();
   drawToast();
@@ -191,9 +193,9 @@ nameInput.value = S.names[S.hero] || "";
 nameInput.placeholder = CATS[S.hero].name;
 resize();
 screen = S.setup ? "home" : "mycat";      // first visit: pick and name your cat
-if (S.setup && S.player) toast(t("welcome", S.player));
 layout();
 requestAnimationFrame(frame);
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });   // keeps the time played
 
 // On a real https address, keep a copy on the phone so it opens with no internet.
 if ("serviceWorker" in navigator && location.protocol === "https:") {

@@ -25,6 +25,7 @@ let memo = null;                    // the last whole solution found, and how fa
 let combo = 0, lastTuckT = -9;      // cats tucked in one after another, and when the last one was
 
 function go(where) {
+  save();                                             // keeps the time played and anything else that changed
   screen = where;
   fade = S.calm ? 0 : 1;
   overlay = null; paused = false; aim = null; thinking = null;
@@ -35,7 +36,7 @@ function layout() {
   const s = safeArea();
   topY = s.t + 8;
   if (screen !== "game" || !L) return;
-  const top = topY + 150, bottom = 104 + (L.hint ? 56 : 0) + s.b;
+  const top = topY + 120, bottom = 104 + (L.hint ? 56 : 0) + s.b;
   const availW = W - 44, availH = H - top - bottom;
   cell = Math.max(24, Math.floor(Math.min(availW / cols, availH / rows, 86)));   // never collapses on a very short screen
   gx = Math.round((W - cols * cell) / 2);
@@ -122,8 +123,8 @@ function undo() {
   floorCats = s.cats; catsLeft = s.catsLeft; slides = s.slides;        // a Treat's 4 extra slides go back with it
   if (s.boards) creaky = s.boards;
   stuck = false; stuckJob = null; thinking = null; memo = null;
-  if (s.treat) { S.pu.treat++; save(); toast(t("treat_back")); }       // undoing a Treat hands the Treat back
-  if (s.hammer) { S.pu.hammer++; save(); toast(t("hammer_back")); }    // and undoing a Hammer hands the Hammer back
+  if (s.treat) { S.pu.treat++; save(); }                               // undoing a Treat hands the Treat back (its count goes up)
+  if (s.hammer) { S.pu.hammer++; save(); }                             // and undoing a Hammer hands the Hammer back
   leaving = []; drag = null; aim = null;
   if (hinting) { hinting = false; guideRuns = []; }
   sfx.undo();
@@ -197,21 +198,23 @@ function breakUncovered(cells) {
   return broke;
 }
 const bedCells = bed => bed.cells.map(([sr, sc]) => [bed.r + sr, bed.c + sc]);
-// After a board breaks or a bed crosses an arrow: can any bed still reach one of its cats?
-// If not, say so gently. The search runs a little each frame (searchTick), and a search that
+// After a board breaks, a bed steps onto a creaky board, or a bed crosses an arrow: can the
+// level still be won from here? If not, say so gently. The search runs a little each frame (searchTick), and a search that
 // gives up early says nothing.
 const STUCK_CAP = 150000;
 function checkStuck() {
   stuckJob = null;
   if (!catsLeft || overlay || stuck) return;
-  stuckJob = makeSearch(boardForSearch(undefined, false, STUCK_CAP));
+  // a whole solution from here: only "none" (proved: no way to win) shows the card; a search
+  // that reaches its cap says nothing
+  stuckJob = makeSearch(boardForSearch(undefined, true, STUCK_CAP));
 }
 
 function tuck(bed, r, c) {
   floorCats[r][c] = null;
   bed.need--; catsLeft--;
   bed.fills.push({ t: S.calm ? 1 : 0, fr: r, fc: c });
-  burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "spark", CATS[skin(bed.color)].fur, 7);
+  burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "spark", CATS[skin(bed.color)].fur, 4);
 }
 
 function doStep(bed, dr, dc) {
@@ -234,8 +237,12 @@ function doStep(bed, dr, dc) {
   const broke = breakUncovered(before.concat(bedCells(bed)));
   peekAround(false);
   // check only when it can have changed: a board broke, a bed filled up while there are holes,
-  // the bed slid on or off an arrow (a slide it may not undo), or a check was still running
-  if (broke || pending || onArrow(before) || onArrow(bedCells(bed)) || (bed.need === 0 && creaky.some(row => row.includes(2)))) checkStuck();
+  // the bed slid on or off an arrow (a slide it may not undo), the bed slid onto a creaky board
+  // (the board will break once it leaves, so the level can already be lost now), or a check was
+  // still running. The check is the same sliced, capped search: it says something only when it
+  // proves no way is left, and nothing if it gives up.
+  const ontoCreaky = bed.need > 0 && bedCells(bed).some(([r, c]) => creaky[r] && creaky[r][c] === 1);
+  if (broke || pending || ontoCreaky || onArrow(before) || onArrow(bedCells(bed)) || (bed.need === 0 && creaky.some(row => row.includes(2)))) checkStuck();
   if (catsLeft === 0 && !overlay) finish("win", LEAVE + 0.1);
   return true;
 }
@@ -245,9 +252,9 @@ function completeBed(bed) {
   bed.leaveT = 0;
   leaving.push(bed);
   if (drag && drag.bed === bed) drag = null;
-  burst(gx + (bed.c + 0.5) * cell, gy + (bed.r + 0.5) * cell, "heart", "#FF5C8A", 5);
-  const C = CATS[skin(bed.color)];                          // a sparkle burst in the cat's own color
-  for (const [r, c] of bedCells(bed)) burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "glint", C.fur === "#FFFFFF" ? C.dark : C.fur, 5);
+  burst(gx + (bed.c + 0.5) * cell, gy + (bed.r + 0.5) * cell, "heart", "#FF5C8A", 3);
+  const C = CATS[skin(bed.color)];                          // a small, short sparkle in the cat's own color
+  for (const [r, c] of bedCells(bed)) burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "glint", C.fur === "#FFFFFF" ? C.dark : C.fur, 2);
   sfx.done(VOICE[skin(bed.color)]);                       // every full bed gets a meow, in that cat's own voice
   let opened = false;
   for (const b of beds) if (b.lock === bed.id) {            // this bed was a key: its lock pops open
@@ -297,13 +304,23 @@ function starsNow() {
 function finish(kind, delay) {
   timerOn = false; drag = null; aim = null;
   const stars = starsNow();
-  overlay = { kind, stars, delay, t: 0, left: timeLeft, rang: false, coins: 0, gift: null, unlocked: null, daily: false, perfect: false };
+  overlay = { kind, stars, delay, t: 0, left: timeLeft, rang: false, coins: 0, gift: null, unlocked: null, daily: false, perfect: false,
+    party: false, golden: false, note: -1, room: 0 };
   if (kind !== "win") return;
   const first = !S.stars[levelIndex], before = totalStars();
+  const chapterEnd = (levelIndex + 1) % CHAPTER_SIZE === 0;
+  // Confetti only when a chapter is finished for the first time (season finales are chapter ends too).
+  // Every other win gets a few soft sparkles.
+  overlay.party = first && chapterEnd;
+  // the first time she finishes a chapter, a love note waits for her (shown as she leaves the card)
+  if (first && chapterEnd && pageOf(levelIndex) < MAX_CHAPTERS && !S.notes.includes(pageOf(levelIndex))) overlay.note = pageOf(levelIndex);
+  S.stats.cats += L.map.join("").replace(/[.#c^v<>]/g, "").length;      // every cat in the level went to bed
+  const roomsBefore = [1, 2].filter(roomOpen);
   if ((S.stars[levelIndex] || 0) < stars) S.stars[levelIndex] = stars;     // stars already earned are never lowered
   if (stars === 3 && !usedPowerup) { S.perfect[levelIndex] = 1; overlay.perfect = true; }   // 3 stars with no powerups: a paw stamp on the home page
   let coins = first ? 10 + stars * 5 : 1;
-  if (first && (levelIndex + 1) % CHAPTER_SIZE === 0) coins += 50;          // finishing a chapter
+  if (first && chapterEnd) coins += 50;                                     // finishing a chapter
+  if (first && isGolden(levelIndex)) { coins *= 2; overlay.golden = true; }  // a golden finale: double coins
   if (isDaily && markDaily()) { coins += 40; overlay.daily = true; }
   if (first && (levelIndex + 1) % 10 === 0) {                              // a gift every tenth level
     const open = POWERUPS.filter(p => puOpen(p.id));       // no Hammer as a gift before she has met it
@@ -311,6 +328,7 @@ function finish(kind, delay) {
     S.pu[pu]++; overlay.gift = pu;
   }
   S.coins += coins; overlay.coins = coins;
+  overlay.room = [1, 2].find(i => roomOpen(i) && !roomsBefore.includes(i)) || 0;   // a new room opened
   // enough stars for a new cat to choose in My cat?
   overlay.unlocked = HEROES.find(k => CAT_STARS[k] > before && CAT_STARS[k] <= totalStars() && !S.cats.includes(k)) || null;
   save();
@@ -318,11 +336,20 @@ function finish(kind, delay) {
 
 function burst(x, y, type, color, n) {
   if (S.calm) n = Math.ceil(n / 3);
+  const small = type === "heart" || type === "glint" || type === "spark";
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 130;
-    const life = type === "heart" ? 1.1 : type === "glint" ? 0.7 : 0.55;
+    const a = Math.random() * Math.PI * 2, sp = small ? 40 + Math.random() * 80 : 50 + Math.random() * 130;
+    const life = type === "heart" ? 0.8 : type === "glint" ? 0.45 : type === "spark" ? 0.4 : 0.55;
     effects.push({ type, color, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (type === "heart" ? 110 : 30),
       life, max: life, rot: Math.random() * 6 });
+  }
+}
+// An ordinary win: a few soft gold sparkles drift up and fade. Calm motion: none.
+function softSparkle() {
+  if (S.calm) return;
+  for (let i = 0; i < 9; i++) {
+    confetti.push({ soft: true, x: W / 2 + (Math.random() - 0.5) * Math.min(W, 320), y: H * (0.3 + Math.random() * 0.4), vx: (Math.random() - 0.5) * 8,
+      vy: -14 - Math.random() * 16, rot: 0, spin: 0, life: 1.6 + Math.random() * 0.8, max: 2.4, r: 3 + Math.random() * 3, color: "#FFD23F" });
   }
 }
 function throwConfetti() {

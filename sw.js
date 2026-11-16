@@ -1,11 +1,12 @@
 // Keeps a copy of the game on the phone so it opens with no internet.
 // Online: fetch the newest files. Offline, or when the network is too slow: use the saved copy.
-const CACHE = "drop-the-bean-v9";
+const CACHE = "drop-the-bean-v10";
 // Music lives in its own store with a name that does not change, so a new version of the
 // game never throws away tracks she has already downloaded.
 const MUSIC_CACHE = "drop-the-bean-music";
-const FILES = ["./", "index.html", "levels-data.js", "js/core.js", "js/art.js", "js/play.js", "js/screens.js", "js/room.js", "js/main.js",
-  "manifest.webmanifest", "icon-180.png", "icon-512.png", "sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav", "sounds/meow-siamese.wav", "sounds/meow-house.wav", "sounds/meow-young.wav",
+const FILES = ["./", "index.html", "levels-data.js", "js/core.js", "js/art.js", "js/play.js", "js/screens.js", "js/room.js", "js/kitchen.js", "js/kitchen-things.js",
+  "js/garden.js", "js/garden-things.js", "js/notes.js", "js/album.js", "js/main.js",
+  "manifest.webmanifest", "icon-180.png", "icon-512.png", "sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav",
   // recorded sound effects (first picks only; see sounds/manifest.json)
   "sounds/sfx-pickup.wav", "sounds/sfx-drop.wav", "sounds/sfx-bump.wav", "sounds/sfx-crack.wav", "sounds/sfx-tuck.wav", "sounds/sfx-star.wav",
   "sounds/sfx-win.wav", "sounds/sfx-coin.wav", "sounds/sfx-tap.wav", "sounds/sfx-purr.wav"];
