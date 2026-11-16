@@ -57,8 +57,10 @@ and how tight the time is. The rules:
 
 - The score rises from chapter to chapter inside a season. No chapter is easier than the one before.
 - Each season's first chapter starts above the previous season's first chapter.
-- Time for 3 stars tightens slowly: from about 1.0x in chapter 1 to about 0.7x by chapter 28,
-  and down to about 0.6x by chapter 80. Never under 30 seconds.
+- Time for 3 stars tightens slowly: from about 1.0x in chapter 1 to about 0.77x by chapter 21,
+  held there to chapter 28, then down to about 0.6x by chapter 80. Never under 30 seconds.
+- Breather levels (slots 5, 10, 15, 20 of a chapter) get 20 percent more time from chapter 21 on.
+- A trap level must never be lost silently: a move that makes it unwinnable is rejected by the level maker.
 
 ## Rewards along the way
 

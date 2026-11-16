@@ -680,6 +680,68 @@ function trapsOf(C, cap = 20000) {
   return { traps, depth, ruin: firstMoves.length ? ruined / firstMoves.length : 0 };
 }
 
+/* ---------- silent dead ends ----------
+   A dead end is fair only if it shows itself. The game checks for one right
+   after a board breaks, a bed rides an arrow, or a bed steps onto a creaky
+   board. The sneaky case: a bed steps onto a creaky board (nothing breaks yet),
+   and that already loses the level, because the bed has to leave the board
+   some day and then another bed can no longer get through. The player can go
+   on tucking in cats for a long time before anything breaks.
+   (Other quiet slides can never lose a level: a slide on plain floor can be
+   slid back, and tucking in a cat only frees room.)
+   This looks at every position near the start ("near" slides of play, up to
+   "cap" positions) and at every position on the stored solution, and counts
+   the slides onto a creaky board that turn a level that could still be won
+   into one that can not. A level with any of those is thrown away. */
+function silentDeadEnds(C, path, near = 4, cap = 1500) {
+  if (!C.creak) return 0;
+  const occ = new Int8Array(C.N), nb = C.nb, memo = new Map();
+  const keyOf = (pos, mask) => pos.join(",") + "/" + mask;
+  const lost = (pos, mask) => {
+    const k = keyOf(pos, mask);
+    if (!memo.has(k)) memo.set(k, isLost(C, pos, mask));
+    return memo.get(k);
+  };
+  // the positions to look at: near the start, and along the solution
+  const todo = [], seen = new Set();
+  const add = (pos, mask, depth) => { const k = keyOf(pos, mask); if (!seen.has(k) && todo.length < cap) { seen.add(k); todo.push({ pos, mask, depth }); } };
+  add(C.start.slice(), C.full, 0);
+  {
+    const pos = C.start.slice();
+    let mask = C.full;
+    for (const [i, dr, dc] of path) {
+      fillOcc(C, occ, pos, 0, mask);
+      const d = DIRS.findIndex(x => x[0] === dr && x[1] === dc), np = C.next[i][pos[i] * STEPS + d];
+      mask = moveMask(C, occ, mask, i, pos[i], np);
+      pos[i] = mask & C.own[i] ? np : -1;
+      add(pos.slice(), mask, near);                                 // "near": do not walk on from here
+    }
+  }
+  let found = 0;
+  for (let head = 0; head < todo.length; head++) {
+    const { pos, mask, depth } = todo[head];
+    fillOcc(C, occ, pos, 0, mask);
+    for (let i = 0; i < nb; i++) {
+      if (!canMove(C, mask, i)) continue;
+      const p = pos[i];
+      for (let d = 0; d < STEPS; d++) {
+        const np = C.next[i][p * STEPS + d];
+        if (np < 0) continue;
+        const nm = moveMask(C, occ, mask, i, p, np);
+        if (nm < 0) continue;
+        const npos = pos.slice();
+        npos[i] = nm & C.own[i] ? np : -1;
+        // quiet, and onto a board it was not on before?
+        const onto = C.crk[i][np] & ~C.crk[i][p];
+        if (onto && (nm & C.creak) === (mask & C.creak) && npos[i] >= 0 && lost(npos, nm) === true && lost(pos, mask) === false) found++;
+        if (depth < near) add(npos, nm, depth + 1);
+      }
+    }
+    fillOcc(C, occ, pos, 0, mask);
+  }
+  return found;
+}
+
 /* ---------- how many times must the player pick up a bed? ----------
    Sliding the same bed on and on counts as one "turn". A plain level needs
    one turn per bed. Every turn above that means a bed had to step aside,
@@ -1093,6 +1155,7 @@ function twistsFor(num) {
    Every level with traps must have a real dead end: a board that can be broken
    early or a one-way lane that can be taken at the wrong time so the level is
    lost, or the player who never plans ends up with no cat in reach.
+   Also, every dead end must show itself (see silentDeadEnds).
    "nasty" is the share of them where that player must fall in (none at first,
    a quarter in chapter 28, all by chapter 80). "nastiest": one of the very first
    slides can already ruin the level, or there are two traps (from about chapter 50). */
@@ -1122,6 +1185,14 @@ function chapterFor(num) {
       sAim: 2, sMin: 1, sMax: 4, eMin: 1, eMax: 6, dMin: small.dBase + 4, dMax: small.dBase + 30, grow: 400,
     }));
     ch.tiers[ch.tiers.length - 1].n -= 5;
+    // then 3 bridging levels: the new trap again, on a middle board (7x6, 5 beds),
+    // before the chapter goes on to the big boards
+    const mid = BOARDS.d5;
+    tiers.push(Object.assign({ n: 3, name: "bridging " + teaches, intro: true }, mid, {
+      [teaches]: teaches === "creaky" ? [1, 2] : [2, 4], nasty: 0, nastiest: 0, trapDepth: 6,
+      sAim: 3.5, sMin: 3, sMax: 6, eMin: 2, eMax: 99, dMin: mid.dBase + 6, dMax: mid.dBase + 40, grow: 400,
+    }));
+    ch.tiers[ch.tiers.length - 1].n -= 3;
   }
   for (const t of ch.tiers) {
     const both = Math.round(t.n * arrowShare * creakyShare);
@@ -1133,6 +1204,13 @@ function chapterFor(num) {
     add(onlyCreaky, { ...softer, creaky: traps.creaky, name: t.name + " creaky" });
     add(onlyArrows, { ...softer, arrows: traps.arrows, name: t.name + " one-way" });
     add(both, { ...softer, creaky: traps.creaky, arrows: traps.arrows, name: t.name + " one-way + creaky" });
+  }
+  // chapter 21 keeps the new boards going: one more creaky level among the big ones
+  // (with the 3 bridging levels that makes 4 in levels 6 to 25)
+  if (num === 21) {
+    const big = tiers[tiers.length - 1];
+    big.n--;
+    tiers.push(Object.assign({}, big, { n: 1, name: big.name + " creaky", creaky: traps.creaky, sAim: big.sAim - 0.5, sMin: Math.floor(big.sAim - 0.5), eMin: Math.floor(big.sAim - 0.5), nasty: traps.nasty, nastiest: traps.nastiest }));
   }
   ch.tiers = tiers;
   return ch;
@@ -1169,7 +1247,7 @@ function tierBonus(t, chapter) {
 //    one-way tiles +14 more), and its first chapter, the one that teaches the
 //    trap with five gentle levels, a little lower.
 // In numbers: 146 in chapter 9, 153 in 10, 150 in 11, 190 in 20, 176 in 21,
-// 211 in 28, 201 in 29, 218 in 32, 235 in 36, 267 in 80.
+// 207 in 28, 197 in 29, 214 in 32, 231 in 36, 267 in 80.
 // The numbers were fitted to what chapters 9 to 32 can give. If a later
 // chapter can not reach its score, the log says so with "!!": then its knobs
 // (laterTiers, chapterFor) need to give more, or a new twist has to add its own
@@ -1179,7 +1257,10 @@ function targetFor(num) {
   const { season, part } = seasonOf(num);
   const newTraps = season >= 4 ? 22 : season === 3 ? 8 : 0;
   const teaching = num === 21 ? 3 : num === 29 ? 4 : 0;
-  return 112.8 + 122 * trendOf(num) + 21 * (part - 0.5) + newTraps - teaching;
+  // the score counts a tight clock too; the targets were fitted with the clock as
+  // first planned, so a kinder clock must not be made up for with harder puzzles
+  const kinderClock = 60 * (squeezeOf(num) - plannedSqueeze(num));
+  return 112.8 + 122 * trendOf(num) + 21 * (part - 0.5) + newTraps - teaching - kinderClock;
 }
 
 // Seconds on the clock. Three stars needs half of it left over.
@@ -1187,14 +1268,30 @@ function targetFor(num) {
 // is a moment to stop and think. Later chapters get less time: the full time in
 // chapter 1, 0.89 of it in chapter 8, 0.7 in chapter 28, 0.6 in chapter 80
 // (straight lines in between), and it stays at 0.6 after that.
-function squeezeOf(chapter) {
+// The clock as it was first planned: 0.7 by chapter 28. The chapter score
+// targets were fitted with it (see targetFor).
+function plannedSqueeze(chapter) {
   if (chapter <= 8) return 1 - 0.3 * (chapter - 1) / 19;
   const at8 = 1 - 0.3 * 7 / 19;
   if (chapter <= 28) return at8 + (0.7 - at8) * (chapter - 8) / 20;
   return Math.max(0.6, 0.7 - 0.1 * (chapter - 28) / 52);
 }
-function timeFor(d, switches, chapter) {
-  return Math.max(30, Math.min(240, Math.ceil((22 + d * 1.9 + switches * 5) * squeezeOf(chapter) / 5) * 5));
+// The clock we use. Up to chapter 20 the same as planned. A play-test showed
+// that sliding on to 0.7 took three stars away from everyone but the most
+// careful players, so from chapter 21 it holds at about 0.77 up to chapter 28,
+// and after that it slides slowly (about 0.003 a chapter) to 0.6 in chapter 80.
+const HOLD = plannedSqueeze(21);
+function squeezeOf(chapter) {
+  if (chapter <= 20) return plannedSqueeze(chapter);
+  if (chapter <= 28) return HOLD;
+  return Math.max(0.6, HOLD - (HOLD - 0.6) * (chapter - 28) / 52);
+}
+// The breather levels of a chapter (places 5, 10, 15 and 20) get a fifth more
+// time, from chapter 21 on, so a breather really feels like one.
+const isBreather = slot => slot > 0 && slot < 25 && slot % 5 === 0;
+function timeFor(d, switches, chapter, slot = 0) {
+  const breather = chapter >= 21 && isBreather(slot) ? 1.2 : 1;
+  return Math.max(30, Math.min(240, Math.ceil((22 + d * 1.9 + switches * 5) * squeezeOf(chapter) * breather / 5) * 5));
 }
 // Put slides of the same bed next to each other where the order does not matter.
 // The solution keeps its length but reads as "this bed, then that bed" with as
@@ -1468,6 +1565,8 @@ function addTraps(t, lv, path) {
     if (!replays(lv2, path)) { no("  traps: solution broke"); continue; }   // should not happen: a safety net
     const C = compile(lv2);
     if (!C) continue;
+    // check near the solution as found and as it will be stored (tidied), since both get played
+    if (silentDeadEnds(C, path) > 0 || silentDeadEnds(C, tidy(lv2, path)) > 0) { no("  traps: a dead end that does not show itself"); continue; }
     const trap = trapsOf(C), plain = plainPlayer(C);
     if (!plain) continue;
     // a real dead end: a board that can be broken early or a lane that can be taken
@@ -1481,10 +1580,11 @@ function addTraps(t, lv, path) {
   return null;
 }
 // The finished level as the game wants it, plus its solution.
-function pack(lv, r, chapter) {
+// "slot": where in the chapter it goes (1 to 25), for the breather time.
+function pack(lv, r, chapter, slot = 0) {
   if (!replays(lv, r.path)) throw new Error("the solution does not finish the level");
   const path = tidy(lv, r.path);
-  return { path, level: { ...lv, time: timeFor(r.d, switchesOf(path), chapter), best: r.d } };
+  return { path, level: { ...lv, time: timeFor(r.d, switchesOf(path), chapter, slot), best: r.d } };
 }
 
 function buildChapter(num) {
@@ -1549,19 +1649,32 @@ function buildChapter(num) {
   }
   // pacing: climb, climb, climb, peak, breather. The chapter ends on its hardest level.
   pool.sort((a, b) => a.hard - b.hard);
-  const ordered = [];
-  for (let g = 0; g < pool.length; g += 5) {
-    const grp = pool.slice(g, g + 5);
-    const last = g + 5 >= pool.length;
-    if (grp.length === 5 && !last) ordered.push(grp[0], grp[1], grp[2], grp[4], grp[3]);
-    else ordered.push(...grp);
+  let ordered = [];
+  if (num < 21) {
+    for (let g = 0; g < pool.length; g += 5) {
+      const grp = pool.slice(g, g + 5);
+      const last = g + 5 >= pool.length;
+      if (grp.length === 5 && !last) ordered.push(grp[0], grp[1], grp[2], grp[4], grp[3]);
+      else ordered.push(...grp);
+    }
+  } else {
+    // From chapter 21: the breather places (5, 10, 15, 20) get levels from the
+    // easiest quarter of the chapter, so the rest is felt. Every other place
+    // climbs, so the level before a breather is the peak of its group of five
+    // and the chapter still ends on its hardest level.
+    const slots = [];
+    for (let slot = fixed.length + 1; slot <= fixed.length + pool.length; slot++) slots.push(slot);
+    const rests = slots.filter(isBreather), quarter = Math.max(rests.length, Math.ceil(pool.length / 4));
+    const restPicks = new Set(rests.map((_, k) => rests.length === 1 ? 0 : Math.round(k * (quarter - 1) / (rests.length - 1))));
+    const easy = pool.filter((_, j) => restPicks.has(j)), climb = pool.filter((_, j) => !restPicks.has(j));
+    ordered = slots.map(slot => (isBreather(slot) ? easy : climb).shift());
   }
   const all = fixed.concat(ordered);
   const levels = [], solutions = [];
   all.forEach(({ lv, r }, i) => {
     if (new Set(lv.beds.map(b => b.color)).size !== lv.beds.length) throw new Error("two beds share a color");
     if (lv.beds.some(b => b.need !== b.cells.length)) throw new Error("a bed must need one cat per cell");
-    const { level: out, path } = pack(lv, r, num);
+    const { level: out, path } = pack(lv, r, num, i + 1);
     if (i === 0 && ch.hint) out.hint = ch.hint;
     if (out.hint) { out.guide = runsOf(path); out.time = Math.max(out.time, 75); }
     levels.push(out); solutions.push(path);
@@ -1617,6 +1730,6 @@ if (require.main === module) {
 }
 module.exports = {
   solve, thinking, prepare, startState, occupancy, slide, DIRS, SHAPES,
-  compile, plainPlayer, solveFast, trapsOf, isLost, extraTurns, thinkingFast, tidy, switchesOf,
+  compile, plainPlayer, solveFast, trapsOf, isLost, silentDeadEnds, extraTurns, thinkingFast, tidy, switchesOf,
   randomLevel, candidate, reasons: () => why, timeFor, squeezeOf, chapterFor, climbOf, seasonOf, difficulty, chaptersOnDisk, PER_CHAPTER, setSeed,
 };

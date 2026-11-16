@@ -1,6 +1,6 @@
 // Keeps a copy of the game on the phone so it opens with no internet.
 // Online: fetch the newest files. Offline, or when the network is too slow: use the saved copy.
-const CACHE = "drop-the-bean-v10";
+const CACHE = "drop-the-bean-v11";
 // Music lives in its own store with a name that does not change, so a new version of the
 // game never throws away tracks she has already downloaded.
 const MUSIC_CACHE = "drop-the-bean-music";
