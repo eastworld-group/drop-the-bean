@@ -23,10 +23,8 @@ let stuckJob = null;                // the search that checks for that, a little
 let thinking = null;                // a hint being worked out, a little each frame (see hintTick)
 let memo = null;                    // the last whole solution found, and how far along it she is
 let combo = 0, lastTuckT = -9;      // cats tucked in one after another, and when the last one was
-// The chain of cats tucked in one after another: still going, the coins it has won this level,
-// where its last cat went to bed (for the coin), and whether the cat chorus has sung this level.
-let comboOpen = false, comboCoins = 0, comboAt = [0, 0], chorusDone = false;
-let popups = [];                    // the small "x3" bubbles and the combo coin, floating over the board
+let chorusDone = false;             // the cat chorus (six cats in a row) has sung this level
+let popups = [];                    // the small "x3" bubbles, floating over the board
 // Yarn balls: "y" in a level's map. Each is { r, c, x, y, rot }: x and y follow r and c
 // smoothly, rot turns as it rolls. A ball never sits under a bed, a cat or on a special tile.
 let balls = [], lastPushT = -9;
@@ -45,14 +43,21 @@ function layout() {
   const s = safeArea();
   topY = s.t + 8;
   if (screen !== "game" || !L) return;
-  const top = topY + 120, bottom = 104 + (L.hint ? 56 : 0) + s.b;
+  const top = topY + 120, bottom = 104 + (hintWordsShown() ? 56 : 0) + s.b;
   const availW = W - 44, availH = H - top - bottom;
   cell = Math.max(24, Math.floor(Math.min(availW / cols, availH / rows, 86)));   // never collapses on a very short screen
   gx = Math.round((W - cols * cell) / 2);
   gy = Math.round(top + Math.max(0, (availH - rows * cell) * 0.45));
 }
 
+// A short message near the bottom. Only for things she needs to know: why something did
+// not work, a hint that cannot be shown, and saving or loading.
 function toast(text) { toastMsg = { text, t: 0 }; }
+
+// The words at the bottom of a teaching level. Only the first two levels keep them: they teach
+// the basic controls. Every twist is taught once, by its twist card and the finger demo.
+const BASIC_HINTS = ["h_drag", "h_block"];
+const hintWordsShown = () => !!L && BASIC_HINTS.includes(L.hint);
 
 /* ---------- twists ----------
    Each twist has a card she sees once, the first time she opens the level that brings it in
@@ -64,6 +69,7 @@ function closeTwist() {
   if (!o || o.kind !== "twist") return;
   if (!S.twists.includes(o.tw)) { S.twists.push(o.tw); save(); }
   overlay = null;
+  if (o.after) toast(o.after);                       // news that waited for the card (the first Hammers)
 }
 
 /* ---------- starting a level ---------- */
@@ -99,7 +105,7 @@ function startLevel(i, asDaily) {
   timeLeft = L.time; timerOn = false; lastTick = 0; introT = 0;
   meterStars = 3; meterJump = -9; snoozed = false; usedPowerup = false;
   stuck = false; stuckJob = null; memo = null; combo = 0; lastTuckT = -9;
-  comboOpen = false; comboCoins = 0; chorusDone = false; popups = [];
+  chorusDone = false; popups = [];
   go("game");
   setGuide(L.guide || []);
   peekAround(true);
@@ -108,7 +114,7 @@ function startLevel(i, asDaily) {
   if (tw >= 0 && !S.twists.includes(tw)) overlay = { kind: "twist", tw, t: 1, delay: 0, at: time };
   if (i >= HAMMER_AT && !S.hammerGot) {                    // she reached level 501: the Hammer shows up, with 2 to start
     S.hammerGot = true; S.pu.hammer = (S.pu.hammer || 0) + 2; save();
-    toast(t("hammer_new"));
+    if (overlay && overlay.kind === "twist") overlay.after = t("hammer_new"); else toast(t("hammer_new"));   // after the twist card, so it can be read
   }
 }
 
@@ -140,7 +146,7 @@ function snapshot() {
     cats: floorCats.map(row => row.map(c => c ? { color: c.color, seed: c.seed, hidden: c.hidden, gate: c.gate, peek: 1 } : null)),
     boards: creaky.map(row => row.slice()),              // broken boards come back on undo
     balls: balls.map(b => [b.r, b.c]),                   // and yarn balls go back where they were
-    catsLeft, slides, comboCoins,
+    catsLeft, slides,
   };
 }
 function undo() {
@@ -150,9 +156,7 @@ function undo() {
   floorCats = s.cats; catsLeft = s.catsLeft; slides = s.slides;        // a Treat's 4 extra slides go back with it
   if (s.boards) creaky = s.boards;
   if (s.balls) balls = s.balls.map(([r, c]) => newBall(r, c));
-  // a step back ends a chain of cats without its coins, and takes back coins won after the snapshot
-  comboOpen = false; combo = 0; lastTuckT = -9; popups = [];
-  if (s.comboCoins !== undefined) comboCoins = s.comboCoins;
+  combo = 0; lastTuckT = -9; popups = [];                              // a step back ends a chain of cats
   stuck = false; stuckJob = null; thinking = null; memo = null;
   if (s.treat) { S.pu.treat++; save(); }                               // undoing a Treat hands the Treat back (its count goes up)
   if (s.hammer) { S.pu.hammer++; save(); }                             // and undoing a Hammer hands the Hammer back
@@ -286,7 +290,6 @@ function doStep(bed, dr, dc) {
   if (got.balls.length) { lastPushT = time; sfx.yarn(); }
   if (got.length) {
     const goingOn = time - lastTuckT < 1.5;
-    if (!goingOn) endCombo();                              // the last chain ran out (its coin, if it earned one)
     combo = goingOn ? combo + 1 : 0;                       // one cat right after another: each note a step higher
     lastTuckT = time;
     sfx.tuck(combo); bed.squash = 1;
@@ -337,29 +340,16 @@ function completeBed(bed) {
    Cats tucked in one after another (each within 1.5 seconds of the last) make a chain; "combo"
    counts from 0, so the chain is combo + 1 cats long. The rising notes are in sfx.tuck.
    3 or more: a small "x3" bubble floats up from the bed. 6: two soft meows sing together, once
-   a level. When a chain of 5 or more ends, it wins 2 coins per cat past 4, shown as one coin. */
-const COMBO_COINS = n => (n >= 5 ? 2 * (n - 4) : 0);
+   a level. A chain wins no coins: it is just for fun. */
 function comboStep(bed) {
   const n = combo + 1, [x, y] = bedCenter(bed, gx + bed.c * cell, gy + bed.r * cell);
-  comboOpen = true; comboAt = [x, y];
   if (n >= 3) {
     popups = popups.filter(p => p.kind !== "combo");     // one bubble at a time: the newest
     popups.push({ kind: "combo", text: "x" + n, x, y: y - cell * 0.35, t: 0, life: 1.1 });
   }
   if (n >= 6 && !chorusDone) { chorusDone = true; sfx.chorus(VOICE[skin(bed.color)]); }
 }
-function endCombo() {
-  if (!comboOpen) return;
-  comboOpen = false;
-  const add = COMBO_COINS(combo + 1);
-  if (!add) return;
-  comboCoins += add;
-  // beside the bed, so it never covers an "x" bubble that is still showing (a level that ends on a chain)
-  popups.push({ kind: "coin", text: "+" + add, x: comboAt[0] + cell * 0.55, y: comboAt[1] + cell * 0.1, t: 0, life: 1.3 });
-  sfx.comboCoin();
-}
-// Each frame (main.js update): yarn balls roll to their cells, popups float and fade,
-// and a chain ends once 1.5 seconds pass with no new cat.
+// Each frame (main.js update): yarn balls roll to their cells, popups float and fade.
 function playExtras(dt) {
   const ease = Math.min(1, dt * 26);
   for (const b of balls) {
@@ -369,7 +359,6 @@ function playExtras(dt) {
   }
   for (const p of popups) p.t += dt;
   popups = popups.filter(p => p.t < p.life);
-  if (comboOpen && time - lastTuckT >= 1.5) endCombo();
 }
 
 // Lift the blanket off any hidden cat that a bed is now next to.
@@ -416,6 +405,7 @@ function finish(kind, delay) {
   overlay.party = first && chapterEnd;
   // the first time she finishes a chapter, a love note waits for her (shown as she leaves the card)
   if (first && chapterEnd && pageOf(levelIndex) < MAX_CHAPTERS && !S.notes.includes(pageOf(levelIndex))) overlay.note = pageOf(levelIndex);
+  const chestBefore = chestReady(pageOf(levelIndex));
   S.stats.cats += L.map.join("").replace(/[.#c^v<>y]/g, "").length;      // every cat in the level went to bed
   const roomsBefore = [1, 2].filter(roomOpen);
   if ((S.stars[levelIndex] || 0) < stars) S.stars[levelIndex] = stars;     // stars already earned are never lowered
@@ -424,18 +414,16 @@ function finish(kind, delay) {
   S.roll = overlay.perfect ? S.roll + 1 : 0;
   S.rollBest = Math.max(S.rollBest, S.roll);
   overlay.roll = S.roll >= 3;
-  endCombo();                                                               // the last chain ends with the level
+  overlay.chest = !chestBefore && chestReady(pageOf(levelIndex));          // 3 stars on all 25: its chest is ready
   let coins = first ? 10 + stars * 5 : 1;
   if (first && chapterEnd) coins += 50;                                     // finishing a chapter
-  if (first && chapterEnd && !isGolden(levelIndex)) { coins = Math.round(coins * 1.5); overlay.ribbon = true; }   // a ribbon level: 1.5 times the coins
   if (first && isGolden(levelIndex)) { coins *= 2; overlay.golden = true; }  // a golden finale: double coins
-  if (isDaily && markDaily()) { coins += 40; overlay.daily = true; }
+  if (isDaily && markDaily()) { coins += 40; overlay.daily = true; }        // and her cat brings today's gift (home screen)
   if (first && (levelIndex + 1) % 10 === 0) {                              // a gift every tenth level
     const open = POWERUPS.filter(p => puOpen(p.id));       // no Hammer as a gift before she has met it
     const pu = open[Math.floor(Math.random() * open.length)].id;
     S.pu[pu]++; overlay.gift = pu;
   }
-  coins += comboCoins; overlay.combo = comboCoins;                         // coins won by chains of cats
   S.coins += coins; overlay.coins = coins;
   overlay.room = [1, 2].find(i => roomOpen(i) && !roomsBefore.includes(i)) || 0;   // a new room opened
   // enough stars for a new cat to choose in My cat?
@@ -834,13 +822,13 @@ function hintBed(bed) {
   if (hinting) { hinting = false; guideRuns = []; }
   startHint(bed);                                        // the answer comes a few frames later (hintTick)
 }
+// Snooze: only on the Time's up card (and for sale in the Shop), so there is always a clock to add to.
 function useSnooze() {
-  if (!S.timer) { toast(t("no_timer")); sfx.no(); return; }
-  if (overlay && overlay.kind !== "lose") return;
+  if (!S.timer || !overlay || overlay.kind !== "lose") return;
   needPowerup("snooze", () => {
     S.pu.snooze--; save();
     timeLeft += 30; lastTick = 0; snoozed = true; usedPowerup = true;
-    if (overlay) { overlay = null; timerOn = true; }         // time was up: back into the level
+    overlay = null; timerOn = true;                          // time was up: back into the level
     sfx.magic();
     burst(W / 2, topY + 85, "spark", "#3B8BEF", 14);
   });

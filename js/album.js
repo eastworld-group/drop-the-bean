@@ -1,13 +1,14 @@
 "use strict";
 /* ==================================================================
-   DROP THE BEAN - album: chapter chests, love notes, and the Album
-   (chapter pictures, stickers, stats), reached from My cat.
+   DROP THE BEAN - album: chapter chests, love notes, and the Album tab
+   with two tabs: Chapters (each chapter's picture and its love note) and
+   Stickers (stickers, the twists she has met, and her stats).
 =================================================================== */
 
 Object.assign(WORDS.en, {
   open_chest: "Open me", chest_coins: "+{0} coins", chest_extra: "Every outfit is yours, so: extra coins!",
   st_levels: "Levels done", st_stars: "Stars", st_cats: "Cats tucked in", st_perfect: "Perfect levels", st_chapters: "Chapters done",
-  st_streak: "Longest daily streak", st_gifts: "Gifts opened", st_time: "Time played",
+  st_streak: "Best daily streak", st_gifts: "Gifts opened", st_time: "Time played", stats_title: "My stats",
   time_hm: "{0} h {1} min", time_m: "{0} min",
 });
 
@@ -135,7 +136,7 @@ const STICKERS = [
   { id: "allcats", icon: "cat2", col: "#17AFA6", name: "Every cat", how: "Open every cat in My cat", got: () => HEROES.every(catOpen) },
   { id: "outfit", icon: "crown", col: "#D9920C", name: "Dressed up", how: "Get your first hat or neck thing", got: () => S.hats.length + S.necks.length >= 1 },
   { id: "chest", icon: "chest", col: "#B5652A", name: "Treasure", how: "Open a chapter chest: 3 stars on all 25 levels", got: () => S.chests.length >= 1 },
-  { id: "giftweek", icon: "gift", col: "#FF7EB6", name: "Gift week", how: "Open all 7 gifts of a gift week", got: () => S.gift.weeks >= 1 },
+  { id: "giftweek", icon: "gift", col: "#FF7EB6", name: "Gift week", how: "Win the Daily nap on 7 days to fill a gift week", got: () => S.gift.weeks >= 1 },
   { id: "roll", icon: "roll", col: "#E0732A", name: "On a roll", how: "3 perfect levels in a row: 3 stars, no powerups", got: () => S.rollBest >= 3 },
 ];
 // A round sticker. Not earned yet: a grey outline only.
@@ -161,108 +162,134 @@ function drawSticker(st, x, y, r, got) {
   else { oval(x, y + 3 * k, 12 * k, 9 * k); ctx.fill(); }
 }
 
-/* ---------- the Album screen ---------- */
-let albumTab = "pics", albumPage = 0;
-function openAlbum() { albumTab = "pics"; albumPage = 0; go("album"); }
-// One painted chapter card: her cat asleep on a cushion, in that chapter's colors.
+/* ---------- the Album screen ----------
+   Two tabs. Chapters: a card for each chapter, its picture with the first line of its love
+   note under it (tap to read the whole note; a small heart means not read yet). Stickers: the
+   stickers, the twists she has met in a row above them, and her stats in a small block below. */
+let albumTab = "chapters", albumPage = 0;
+function openAlbum() { albumTab = "chapters"; albumPage = 0; go("album"); }
+// One painted chapter picture: her cat asleep on a cushion, in that chapter's colors.
 function drawChapterCard(n, x, y, w, h, done) {
   if (!done) {
     rr(x, y, w, h, 14); ctx.fillStyle = "rgba(255, 255, 255, 0.45)"; ctx.fill();
     ctx.setLineDash([5, 5]); rr(x, y, w, h, 14); ctx.strokeStyle = "#B5BDD3"; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
-    label(String(n + 1), x + w / 2, y + h * 0.45, Math.round(w * 0.26), "#9AA3CC", 900);
+    label(String(n + 1), x + w / 2, y + h * 0.5, Math.round(Math.min(w * 0.26, h * 0.4)), "#9AA3CC", 900);
     return;
   }
-  const lk = lookFor(n);
+  const lk = lookFor(n), m = Math.min(w, h * 1.15);                    // the cat and cushion fit a wide card too
   ctx.save(); rr(x, y, w, h, 14); ctx.clip();
   const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, lk.bg[0]); g.addColorStop(1, lk.bg[1]);
   ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = ctx.strokeStyle = "rgba(255, 255, 255, 0.55)"; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  for (const [u, v, k] of [[0.2, 0.18, 0.09], [0.8, 0.26, 0.07], [0.62, 0.1, 0.05]]) { ctx.save(); ctx.translate(x + w * u, y + h * v); drawMotif(lk.motif, w * k); ctx.restore(); }
-  oval(x + w / 2, y + h * 0.78, w * 0.4, h * 0.13); ctx.fillStyle = lk.trayDark; ctx.fill();         // a cushion in the chapter's colors
-  oval(x + w / 2, y + h * 0.75, w * 0.36, h * 0.11); ctx.fillStyle = lk.tray; ctx.fill();
-  drawCat(x + w / 2, y + h * 0.6, w * 0.6, S.hero, { wake: 0, still: true, noShadow: true, seed: n, hat: S.hat, neck: S.neck });
+  for (const [u, v, k] of [[0.16, 0.22, 0.09], [0.84, 0.3, 0.07], [0.68, 0.12, 0.05]]) { ctx.save(); ctx.translate(x + w * u, y + h * v); drawMotif(lk.motif, m * k); ctx.restore(); }
+  oval(x + w / 2, y + h * 0.8, m * 0.4, h * 0.13); ctx.fillStyle = lk.trayDark; ctx.fill();         // a cushion in the chapter's colors
+  oval(x + w / 2, y + h * 0.77, m * 0.36, h * 0.11); ctx.fillStyle = lk.tray; ctx.fill();
+  drawCat(x + w / 2, y + h * 0.6, m * 0.6, S.hero, { wake: 0, still: true, noShadow: true, seed: n, hat: S.hat, neck: S.neck });
   ctx.restore();
   rr(x, y, w, h, 14); ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 3; ctx.stroke();
-  if (!S.notes.includes(n)) { ctx.fillStyle = "#FF5C8A"; drawHeart(x + w - 12, y + 14, 16); }     // a note not read yet
+  if (!S.notes.includes(n)) { ctx.fillStyle = "#FF5C8A"; drawHeart(x + w - 13, y + 15, 16); }     // a note not read yet
 }
 // A paged grid: works out how many fit, draws the page arrows, and calls "cellAt" for each.
-function albumGrid(count, colsN, cw, chh, gap, top, bottom, cellAt) {
+// "extra" pages (after the grid's own) are drawn by the caller; returns { pages, onExtra }.
+function albumGrid(count, colsN, cw, chh, gap, top, bottom, cellAt, extra) {
   const rowsN = Math.max(1, Math.floor((bottom - top - 50 + gap) / (chh + gap))), per = colsN * rowsN;
-  const pages = Math.max(1, Math.ceil(count / per));
+  const gridPages = Math.max(1, Math.ceil(count / per)), pages = gridPages + (extra || 0);
   albumPage = Math.max(0, Math.min(pages - 1, albumPage));
   const gw = colsN * cw + (colsN - 1) * gap, x0 = (W - gw) / 2;
-  for (let i = 0; i < per; i++) {
+  if (albumPage < gridPages) for (let i = 0; i < per; i++) {
     const n = albumPage * per + i;
     if (n >= count) break;
     cellAt(n, x0 + (i % colsN) * (cw + gap), top + Math.floor(i / colsN) * (chh + gap));
   }
   if (pages > 1) {
-    const py = Math.min(bottom - 44, top + rowsN * (chh + gap) + 2);
+    const py = Math.max(top, Math.min(bottom - 44, top + rowsN * (chh + gap) + 2));
     roundButton(W / 2 - 96, py, 40, "back", () => { albumPage--; }, { dim: albumPage === 0 });
     roundButton(W / 2 + 56, py, 40, "fwd", () => { albumPage++; }, { dim: albumPage >= pages - 1 });
     label(t("page_of", albumPage + 1, pages), W / 2, py + 20, 14, INK, 800);
   }
+  return { pages, onExtra: albumPage >= gridPages };
+}
+const chapterCount = () => Math.min(MAX_CHAPTERS, Math.ceil(LEVELS.length / CHAPTER_SIZE));
+const chapterDone = n => !!S.stars[n * CHAPTER_SIZE + CHAPTER_SIZE - 1];
+// The Chapters tab: each chapter's picture, and the first line of its love note under it.
+function drawAlbumChapters(top, bottom) {
+  const count = chapterCount();
+  let open = 0; for (let n = 0; n < count; n++) if (chapterDone(n)) open++;
+  fitLabel(open ? t("notes_count", open, count) : t("notes_none"), W / 2, top + 6, 13, W - 40, SOFT, 800);
+  const gap = 10, colsN = Math.max(2, Math.min(4, Math.floor((W - 32 + gap) / (150 + gap))));
+  const cw = Math.max(60, Math.min(180, (W - 32 - gap * (colsN - 1)) / colsN)), ph = Math.round(cw * 0.46), chh = ph + 38;
+  albumGrid(count, colsN, cw, chh, gap, top + 22, bottom, (n, x, y) => {
+    const done = chapterDone(n);
+    drawChapterCard(n, x, y, cw, ph, done);
+    fitLabel(t("note_from", n + 1, chapterName(n)), x + cw / 2, y + ph + 11, 11, cw - 4, SOFT, 800);
+    if (done) {
+      const lines = wrapLines(noteText(n), cw - 6, 13, 700);
+      fitLabel(lines.length > 1 ? lines[0].replace(/[.,!?;:]+$/, "") + "..." : lines[0],x + cw / 2, y + ph + 28, 13, cw - 4, INK, 700);
+    }
+    buttons.push({ x, y, w: cw, h: chh, onTap: () => { if (done) openNote(n); else { toast(t("pic_locked", n + 1)); sfx.no(); } } });
+  });
+}
+// Her stats in a small block: two columns of four.
+const STATS_ROW = 22;
+function drawStatsBlock(y) {
+  const secs = Math.floor(S.stats.time), hrs = Math.floor(secs / 3600), mins = Math.floor((secs % 3600) / 60);
+  const rows = [["st_levels", levelsDone()], ["st_stars", totalStars()], ["st_cats", S.stats.cats], ["st_perfect", perfectCount()],
+    ["st_chapters", chaptersDone()], ["st_streak", S.stats.best], ["st_gifts", S.stats.gifts], ["st_time", hrs ? t("time_hm", hrs, mins) : t("time_m", mins)]];
+  const rw = Math.max(200, Math.min(380, W - 24)), rx = (W - rw) / 2, half = rw / 2, h = 4 * STATS_ROW + 14;
+  rr(rx, y + 3, rw, h, 16); ctx.fillStyle = "#8FB4E3"; ctx.fill();
+  rr(rx, y, rw, h, 16); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+  ctx.fillStyle = "#EEF3FF"; ctx.fillRect(rx + half - 0.75, y + 10, 1.5, h - 20);
+  rows.forEach(([key, val], i) => {
+    const col = i % 2, cx = rx + col * half, cy = y + 7 + Math.floor(i / 2) * STATS_ROW + STATS_ROW / 2;
+    ctx.font = `900 13px ${FONT}`;
+    const vw = Math.min(half * 0.45, ctx.measureText(String(val)).width);
+    leftLabel(t(key), cx + 12, cy, 12, Math.max(20, half - vw - 30), INK);
+    fitLabel(String(val), cx + half - 12 - vw / 2, cy, 13, half * 0.45, "#9C3A00", 900);
+  });
+  return h;
+}
+const statsBlockH = () => 4 * STATS_ROW + 14;
+// The Stickers tab: the twists she has met, the stickers, and her stats. When it all fits it is
+// one page; on a smaller screen the stickers are paged and the stats get the last page.
+function drawAlbumStickers(top, bottom) {
+  const met = TWISTS.map((_, i) => i).filter(i => S.twists.includes(i)), ts = Math.max(20, Math.min(44, (W - 32) / 7 - 6));
+  fitLabel(met.length ? t("twists_met") : t("twists_none"), W / 2, top + 6, 13, W - 32, SOFT, 800);
+  met.forEach((i, j) => {
+    const tx = W / 2 + (j - (met.length - 1) / 2) * (ts + 6);
+    drawTwistPic(TWISTS[i][1], tx, top + 22 + ts / 2, ts);
+    buttons.push({ x: tx - ts / 2 - 3, y: top + 20, w: ts + 6, h: ts + 6, onTap: () => { overlay = { kind: "twist", tw: i, t: 1, delay: 0, at: time }; } });
+  });
+  const colsN = W >= 560 ? 7 : W >= 340 ? 5 : 4, gap = 8;
+  const cw = Math.max(52, Math.min(84, (W - 24 - gap * (colsN - 1)) / colsN)), chh = cw * 0.68 + 20;
+  const gTop = top + (met.length ? ts + 32 : 24), rowsAll = Math.ceil(STICKERS.length / colsN);
+  const gridH = rowsAll * chh + (rowsAll - 1) * gap, statsH = statsBlockH();
+  const sticker = (n, x, y) => {
+    const st = STICKERS[n], got = st.got(), r = cw * 0.3;
+    drawSticker(st, x + cw / 2, y + r + 3, r, got);
+    fitLabel(st.name, x + cw / 2, y + r * 2 + 13, 11, cw - 2, got ? INK : SOFT, 800);
+    buttons.push({ x, y, w: cw, h: chh, onTap: () => toast(st.name + ": " + st.how) });
+  };
+  if (gTop + gridH + 12 + statsH <= bottom) {                // everything on one page
+    albumPage = 0;
+    const gw = colsN * cw + (colsN - 1) * gap, x0 = (W - gw) / 2;
+    STICKERS.forEach((_, n) => sticker(n, x0 + (n % colsN) * (cw + gap), gTop + Math.floor(n / colsN) * (chh + gap)));
+    drawStatsBlock(Math.max(gTop + gridH + 12, bottom - statsH - 4));
+    return;
+  }
+  const grid = albumGrid(STICKERS.length, colsN, cw, chh, gap, gTop, bottom, sticker, 1);
+  if (grid.onExtra) {                                       // the last page: her stats
+    label(t("stats_title"), W / 2, gTop + 8, 15, INK, 900);
+    drawStatsBlock(gTop + 22);
+  }
 }
 function drawAlbum() {
-  const s = safeArea();
   starPill(W - 16 - 86, topY + 11);
   fitLabel(t("album"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
-  const tabs = ["pics", "notes", "stickers", "stats"], tw = Math.max(60, Math.min(96, (W - 32 - 24) / 4));
-  tabs.forEach((id, i) => pillButton(W / 2 + (i - 1.5) * (tw + 8) - tw / 2, topY + 52, tw, 40, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
-    albumTab === id, { fill: "#FFFFFF", text: 0.34 }));
+  if (albumTab !== "chapters" && albumTab !== "stickers") albumTab = albumTab === "stats" ? "stickers" : "chapters";   // the old tab names
+  const tabs = ["chapters", "stickers"], tw = Math.max(80, Math.min(140, (W - 32 - 8) / 2));
+  tabs.forEach((id, i) => pillButton(W / 2 + (i - 0.5) * (tw + 8) - tw / 2, topY + 52, tw, 40, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
+    albumTab === id, { fill: "#FFFFFF", text: 0.38 }));
   const top = topY + 104, bottom = tabTop() - 8;
-  if (albumTab === "pics") {
-    const colsN = W >= 400 ? 4 : 3, gap = 10, cw = Math.max(56, Math.min(100, (W - 32 - gap * (colsN - 1)) / colsN)), chh = cw * 1.05 + 18;
-    const count = Math.min(MAX_CHAPTERS, Math.ceil(LEVELS.length / CHAPTER_SIZE));
-    albumGrid(count, colsN, cw, chh, gap, top, bottom, (n, x, y) => {
-      const done = !!S.stars[n * CHAPTER_SIZE + CHAPTER_SIZE - 1], h = cw * 1.05;
-      drawChapterCard(n, x, y, cw, h, done);
-      fitLabel(t("chapter_n", n + 1), x + cw / 2, y + h + 10, 11, cw, done ? INK : SOFT, 800);
-      buttons.push({ x, y, w: cw, h: chh, onTap: () => { if (done) openNote(n); else { toast(t("pic_locked", n + 1)); sfx.no(); } } });
-    });
-  } else if (albumTab === "notes") {
-    // every love note she has unlocked, newest chapter last; tap one to read it in full
-    const count = Math.min(MAX_CHAPTERS, Math.ceil(LEVELS.length / CHAPTER_SIZE));
-    const open = []; for (let n = 0; n < count; n++) if (S.stars[n * CHAPTER_SIZE + CHAPTER_SIZE - 1]) open.push(n);
-    fitLabel(open.length ? t("notes_count", open.length, count) : t("notes_none"), W / 2, top + 8, 13, W - 40, SOFT, 800);
-    const rw = Math.max(220, Math.min(360, W - 32)), rx = (W - rw) / 2, rh = 64;
-    albumGrid(open.length, 1, rw, rh, 8, top + 26, bottom, (i, x, y) => {
-      const n = open[i], unread = !S.notes.includes(n);
-      rr(x, y + 3, rw, rh, 16); ctx.fillStyle = "#8FB4E3"; ctx.fill();
-      rr(x, y, rw, rh, 16); ctx.fillStyle = "#FFFFFF"; ctx.fill();
-      ctx.fillStyle = unread ? "#FF5C8A" : "#F7B6C8"; drawHeart(x + 26, y + rh / 2 + 2, 22);
-      leftLabel(t("note_from", n + 1, chapterName(n)), x + 48, y + 20, 12, rw - 64, SOFT);
-      leftLabel(wrapLines(noteText(n), rw - 64, 15, 700)[0] + (wrapLines(noteText(n), rw - 64, 15, 700).length > 1 ? "..." : ""), x + 48, y + 43, 15, rw - 64, INK);
-      buttons.push({ x, y, w: rw, h: rh, onTap: () => openNote(n) });
-    });
-  } else if (albumTab === "stickers") {
-    // the twists she has met, in a row: tap one to see its card again
-    const met = TWISTS.map((_, i) => i).filter(i => S.twists.includes(i)), ts = Math.min(44, (W - 32) / 7 - 6);
-    fitLabel(met.length ? t("twists_met") : t("twists_none"), W / 2, top + 6, 13, W - 32, SOFT, 800);
-    met.forEach((i, j) => {
-      const tx = W / 2 + (j - (met.length - 1) / 2) * (ts + 6);
-      drawTwistPic(TWISTS[i][1], tx, top + 22 + ts / 2, ts);
-      buttons.push({ x: tx - ts / 2 - 3, y: top + 20, w: ts + 6, h: ts + 6, onTap: () => { overlay = { kind: "twist", tw: i, t: 1, delay: 0, at: time }; } });
-    });
-    const colsN = W >= 400 ? 5 : 4, gap = 8, cw = Math.max(60, Math.min(84, (W - 24 - gap * (colsN - 1)) / colsN)), chh = cw * 0.72 + 22;
-    albumGrid(STICKERS.length, colsN, cw, chh, gap, top + (met.length ? ts + 32 : 24), bottom, (n, x, y) => {
-      const st = STICKERS[n], got = st.got(), r = cw * 0.3;
-      drawSticker(st, x + cw / 2, y + r + 4, r, got);
-      fitLabel(st.name, x + cw / 2, y + r * 2 + 16, 11, cw - 2, got ? INK : SOFT, 800);
-      buttons.push({ x, y, w: cw, h: chh, onTap: () => toast(st.name + ": " + st.how) });
-    });
-  } else {
-    const secs = Math.floor(S.stats.time), hrs = Math.floor(secs / 3600), mins = Math.floor((secs % 3600) / 60);
-    const rows = [["st_levels", levelsDone()], ["st_stars", totalStars()], ["st_cats", S.stats.cats], ["st_perfect", perfectCount()],
-      ["st_chapters", chaptersDone()], ["st_streak", S.stats.best], ["st_gifts", S.stats.gifts], ["st_time", hrs ? t("time_hm", hrs, mins) : t("time_m", mins)]];
-    const rw = Math.max(200, Math.min(360, W - 32)), rx = (W - rw) / 2, rh = Math.max(28, Math.min(48, (bottom - top - 10) / rows.length));
-    rr(rx, top + 4, rw, rows.length * rh + 12, 20); ctx.fillStyle = "#8FB4E3"; ctx.fill();
-    rr(rx, top, rw, rows.length * rh + 12, 20); ctx.fillStyle = "#FFFFFF"; ctx.fill();
-    rows.forEach(([key, val], i) => {
-      const y = top + 6 + i * rh + rh / 2;
-      if (i) { ctx.fillStyle = "#EEF3FF"; ctx.fillRect(rx + 14, y - rh / 2, rw - 28, 1.5); }
-      leftLabel(t(key), rx + 18, y, Math.min(15, Math.round(rh * 0.36)), rw * 0.62, INK);
-      label(String(val), rx + rw - 18, y, Math.min(17, Math.round(rh * 0.4)), "#9C3A00", 900, "right");
-    });
-  }
+  if (albumTab === "chapters") drawAlbumChapters(top, bottom);
+  else drawAlbumStickers(top, bottom);
 }

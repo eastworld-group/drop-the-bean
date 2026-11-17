@@ -287,7 +287,7 @@ function freshSave() {
     neck: "", necks: [], sound: true, music: true, track: 0, meow: 0, timer: true, shapes: false, calm: false,
     daily: { last: "", streak: 0 }, setup: false, player: "", room: { own: [], put: {} }, roomView: 0,
     // notes: chapters whose love note she has read. chests: chapters whose treasure she opened.
-    // gift: the daily cat gift (the day it was last opened, how far into the week, whole weeks done).
+    // gift: the daily cat gift (the day it was last opened, how many Daily naps won this week, whole weeks done).
     // stats: cats tucked in, seconds played, longest daily streak, gifts opened.
     notes: [], chests: [], gift: { last: "", day: 0, weeks: 0 }, stats: { cats: 0, time: 0, best: 0, gifts: 0 },
     // saving: when she last saved a backup (ms), how many levels she had then, the day she was last reminded
@@ -519,10 +519,14 @@ function dailyStreak() {
   const y = new Date(); y.setDate(y.getDate() - 1);
   return S.daily.last === todayKey(y) ? (S.daily.streak || 0) : 0;
 }
+// Winning today's Daily nap is the one daily habit: it keeps the streak going, counts one
+// day of the gift week (day 7 rounds off a week), and her cat brings today's gift (room.js).
 function markDaily() {
   if (dailyDone()) return false;
   S.daily = Object.assign({}, S.daily, { last: todayKey(), streak: dailyStreak() + 1 });
   S.stats.best = Math.max(S.stats.best, S.daily.streak);
+  const day = S.gift.day >= 7 ? 1 : S.gift.day + 1;
+  S.gift = Object.assign({}, S.gift, { day, weeks: S.gift.weeks + (day === 7 ? 1 : 0) });
   return true;
 }
 
@@ -550,7 +554,7 @@ const WORDS = {
     pu_hint: "Hint", pu_snooze: "Snooze", pu_treat: "Treat", pu_hammer: "Hammer",
     pu_hint_d: "Shows the next move for a bed", pu_snooze_d: "Adds 30 seconds", pu_treat_d: "Tucks in the cat you pick.",
     pu_hammer_d: "Fixes one broken board",
-    bought: "Bought 1 {0}", bought_item: "It's yours: {0}!", need_coins: "You need {0} more coins", no_timer: "No timer in relaxed mode",
+    bought: "Bought 1 {0}", bought_item: "It's yours: {0}!", need_coins: "You need {0} more coins",
     buy_q: "Buy {0}?", buy_yes: "Buy", buy_no: "Not now", buy_have: "You have {0} coins",
     aim_treat: "Tap a cat to tuck it in", aim_hint: "Tap a bed to see its next move", aim_cancel: "Tap anywhere else to cancel",
     aim_hammer: "Tap a hole to fix it", no_holes: "No holes to fix", hammer_back: "Your Hammer is back",
@@ -558,7 +562,7 @@ const WORDS = {
     bed_wait: "This bed has to wait. Try this first.", no_hint: "No hint right now", treat_back: "Your Treat is back",
     thinking: "Thinking", hint_lost: "Try undo or restart",
     pick_cat: "Pick your cat", name_cat: "Tap the name to change it", no_hat: "None",
-    tab_cats: "Cats", tab_hats: "Hats", tab_neck: "Neck", wear_tip: "Tap one to wear it", shop_outfits: "Hats and bow ties are in My cat",
+    tab_cats: "Cats", tab_hats: "Hats", tab_neck: "Neck", wear_tip: "Tap one to try it on. Tap again to buy it.", shop_outfits: "Hats and bow ties are in My cat",
     hat_bow: "Bow", hat_cap: "Nightcap", hat_flower: "Flower", hat_party: "Party hat", hat_crown: "Crown",
     hat_beanie: "Beanie", hat_tophat: "Top hat", hat_wizard: "Wizard hat",
     neck_collar: "Bell collar", neck_bowtie: "Bow tie", neck_scarf: "Scarf",
@@ -594,22 +598,21 @@ const WORDS = {
     h_oneway: ["New: arrow tiles go one way.", "A bed on an arrow can only move the way it points."],
     h_yarn: ["New: yarn balls.", "A bed pushes a ball one square. A ball in a corner stays stuck."],
     t_levels: "Levels", t_home: "Home", t_room: "Room", chapter_line: "Chapter {0}, {1} · {2} of {3}",
-    try_on: "Looks cute! Tap it again to buy it.",
     on_roll: "On a roll!", twist_new: "A new twist!", ok: "OK", twists_met: "Twists you have met. Tap one to see it again.",
-    twists_none: "New twists you meet will show here.", relax_q: "Play without the clock?", ribbon_won: "Ribbon level: extra coins!",
+    twists_none: "New twists you meet will show here.", relax_q: "Play without the clock?", chest_ready: "A treasure chest is ready!",
     stuck: "The beds can't reach their cats now.", stuck2: "Undo or restart.",
     room: "My room", room_tip: "Tap a spot to decorate", room_none: "Nothing here", in_room: "In your room",
     chapters: "Chapters", chapter_n: "Chapter {0}", where: "Where I am", you_here: "You are here",
-    golden: "Golden bed: double coins!", new_room: "New room: the {0}!", note_new: "A note for you",
-    note_title: "A note for you", note_from: "Chapter {0}: {1}", note_where: "Read it again any time: My cat, then Album, then Notes.",
-    tab_notes: "Notes", notes_none: "Finish a chapter to unlock your first note.", notes_count: "{0} of {1} notes unlocked",
+    new_room: "New room: the {0}!",
+    note_title: "A note for you", note_from: "Chapter {0}: {1}", note_where: "Read it again any time in the Album.",
+    notes_none: "Finish a chapter to unlock your first note.", notes_count: "{0} of {1} notes unlocked",
     save_now: "Save my progress", save_file_note: "Saves a small file. Keep it in Files, Notes or a chat with yourself.",
     load_file: "Load a saved file", or_code: "Or use a code", last_saved: "Last saved: {0}", never_saved: "Not saved yet",
     saved_ok: "Saved! Keep that file somewhere safe.", saved_copy: "Saved as a code. Paste it somewhere safe.",
     load_sure: "This file has {0} stars. Replace this phone's progress with it?", load_yes: "Yes, load it", load_no: "Not now",
     bad_file: "That file doesn't have a save in it", save_remind: "It has been a while. Save your progress in Settings.",
     today: "today", yesterday: "yesterday", days_ago: "{0} days ago",
-    album: "Album", tab_pics: "Pictures", tab_stickers: "Stickers", tab_stats: "My stats",
+    album: "Album", tab_chapters: "Chapters", tab_stickers: "Stickers",
     page_of: "{0} of {1}", pic_locked: "Finish chapter {0} to paint this one",
     chest_title: "Treasure!", chest_got: "For your cat: {0}", chest_tip: "3 stars on every level of a chapter opens its chest",
   },
@@ -793,8 +796,6 @@ const sfx = {
   yarn:   () => { tone(150, 0.09, { to: 95, vol: 0.05 }); tone(300, 0.05, { vol: 0.012, type: "triangle", delay: 0.01 }); },
   // six cats in a row: two soft meows together, in harmony (a major third apart), quieter than a normal meow
   chorus: pitch => { meow(0.05, pitch, { vol: 0.42 }); meow(0.09, pitch, { vol: 0.34, rate: 1.26 }); },
-  // the coin a long chain of cats wins
-  comboCoin: () => playRec("coin", { vol: 0.6 }) || sfx.coinTone(),
   // a full bed's cover is pulled over its cats: a quiet purr under the chime and meow
   tuckIn: () => playRec("purr", { vol: 0.32, delay: 0.12 }) || tone(90, 0.3, { vol: 0.03, delay: 0.12, attack: 0.08 }),
   place:  () => { tone(392, 0.08, { vol: 0.07, type: "triangle" }); tone(587, 0.12, { vol: 0.06, type: "triangle", delay: 0.07 }); },

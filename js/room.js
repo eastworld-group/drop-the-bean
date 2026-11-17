@@ -33,7 +33,7 @@ Object.assign(WORDS.en, {
   gift_week: "Gift week", gift_from: "A gift from {0}!", gift_day: "Day {0} of 7", gift_big: "Day 7: a big gift!",
   gift_coins: "+{0} coins", gift_pu: "1 {0}", gift_item: "For your room: {0}", gift_item_tip: "Tap its spot in the {0} to put it out.",
   cal_title: "Gift week", cal_day: "Day {0}", cal_today: "Today", cal_next: "Tomorrow",
-  cal_tip: "A cat brings a gift each day. Missed a day? Your week just waits for you.", cal_tip2: "Day 7 is a big one.",
+  cal_tip: "Win the Daily nap and your cat brings a gift.", cal_tip2: "Missed a day? Your week waits. Day 7 is a big one.",
   open_gift: "Tap the gift",
 });
 
@@ -668,7 +668,7 @@ function newPet() {
 }
 function roomUpdate(dt) {
   if (!pet) pet = newPet();
-  const p = pet, gift = giftReady();
+  const p = pet;
   if (time - p.blinkAt > 0.18) p.blinkAt = time + 2.5 + Math.random() * 3.5;      // blinks, even with calm motion
   if (time - p.swishAt > 1.5) p.swishAt = time + 5 + Math.random() * 6;
   if (S.calm) { p.move = null; p.pose = "sit"; }
@@ -681,14 +681,13 @@ function roomUpdate(dt) {
   } else if (time > p.until && !S.calm) {
     p.until = time + 15 + Math.random() * 15;
     if (p.pose === "nap") p.pose = "sit";                       // she wakes up again
-    else if (!gift && Math.random() < 0.4) { p.pose = "nap"; p.until = time + 10 + Math.random() * 12; }
-    else if (!gift && Math.random() < 0.6) {
+    else if (Math.random() < 0.4) { p.pose = "nap"; p.until = time + 10 + Math.random() * 12; }
+    else if (Math.random() < 0.6) {
       const to = PET_SPOTS.map((x, i) => i).filter(i => i !== p.spot)[Math.floor(Math.random() * 2)];
       p.spot = to; p.face = PET_SPOTS[to] > p.x ? 1 : -1;
       p.move = { x0: p.x, x1: PET_SPOTS[to], t: 0, dur: 1.6 };
     }
   }
-  if (gift) p.pose = "sit";                                      // with today's gift she waits for her, awake
   const want = p.move || time < p.perk || p.pose === "sit" ? 1 : 0;
   p.wake = S.calm ? want : p.wake + (want - p.wake) * Math.min(1, dt * 2.5);
   for (const f of roomFx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; }
@@ -726,13 +725,12 @@ function roomStroke(x, y) {
 }
 
 /* ---------- the daily cat gift ----------
-   Once a day one of her cats waits in the room with a small present. Tapping it opens it.
-   The gifts count up a week of 7; day 7 is a bigger present. Missing a day takes nothing
-   away: the week just carries on from where she is. */
-const giftReady = () => S.gift.last !== todayKey();
+   One daily habit: winning today's Daily nap. Once she has, her cat holds a small present on
+   the home screen; tapping it opens it. Each Daily nap won is one day of the gift week
+   (markDaily in core.js counts it); day 7 is a bigger present. Missing a day takes nothing
+   away: the week just carries on from where she is. The Room has the gift week card. */
+const giftReady = () => dailyDone() && S.gift.last !== todayKey();
 const giftCatKey = () => S.hero;                              // her own cat brings it
-// Which day of the week the next gift is (1 to 7).
-const giftDayNext = () => (S.gift.day >= 7 ? 1 : S.gift.day + 1);
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 // What is in the box. Days 1 to 6: usually coins (20 to 60), sometimes a powerup (22 in 100),
 // rarely a thing for a room she has opened and does not own yet, up to 1500 coins (8 in 100).
@@ -754,15 +752,15 @@ function rollGift(day) {
 }
 function openGift() {
   if (!giftReady() || overlay) return;
-  const day = giftDayNext(), key = giftCatKey(), got = rollGift(day);
+  const day = Math.max(1, S.gift.day), key = giftCatKey(), got = rollGift(day);   // the week day was counted when she won
   S.coins += got.coins;
   if (got.pu) S.pu[got.pu]++;
   if (got.item && !S.room.own.includes(got.item)) S.room.own.push(got.item);
-  S.gift = { last: todayKey(), day, weeks: S.gift.weeks + (day === 7 ? 1 : 0) };
+  S.gift = Object.assign({}, S.gift, { last: todayKey() });
   S.stats.gifts++;
   save();
   sfx.magic(); if (got.coins) sfx.coin();
-  if (pet) { pet.perk = time + 3; pet.pose = "sit"; }
+  homeCat.squishT = time;                                       // her cat on the home screen gives a little happy squish
   overlay = { kind: "gift", t: 0, delay: 0, at: time, day, key, got };
 }
 const roomBusy = () => !!pet && (!!pet.move || Math.abs(pet.wake - petTarget()) > 0.02) || roomFx.length > 0;
@@ -804,8 +802,7 @@ function drawRoomScreen() {
   const ox = (W - RW * k) / 2, oy = top + Math.max(0, (availH - RH * k) * 0.3);
   roomAt = { k, ox, oy };
   if (!pet) pet = newPet();
-  const holder = giftReady(), big = giftDayNext() === 7, p = pet;
-  const giftX = p.x + p.face * PET_S * 0.43, giftS = big ? 64 : 54;         // today's present, at her side (away from her tail)
+  const p = pet;
 
   // the room itself, in room units
   rr(ox - 5, oy - 5 + 6, RW * k + 10, RH * k + 10, 24); ctx.fillStyle = "rgba(20, 28, 90, 0.22)"; ctx.fill();
@@ -826,8 +823,7 @@ function drawRoomScreen() {
   const bob = p.move && !S.calm ? Math.abs(Math.sin(p.move.t * 7)) * 5 : 0;
   drawCat(p.x, PET_FEET - PET_S * 0.37 - bob, PET_S, S.hero, { seed: 1.3, wake: p.wake, hat: S.hat, neck: S.neck, still: true,
     sx: -p.face, sy: 1, breath: S.calm ? 0 : 1, blink, wag, happy: time < p.happy });
-  if (holder && !p.move) drawPresent(giftX, PET_FEET + 2, giftS, big);
-  else if (p.wake < 0.5 && !S.calm) {                              // little z's while she naps
+  if (p.wake < 0.5 && !S.calm) {                              // little z's while she naps
     const zt = (time * 0.45) % 1;
     ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.8;
     label("z", p.x + PET_S * 0.12 + zt * 10, PET_FEET - PET_S * 0.62 - zt * 22, Math.round(20 + zt * 10), INK, 900);
@@ -856,23 +852,17 @@ function drawRoomScreen() {
   }
   ctx.restore();
 
-  // tapping: the spots first (the big wall and floor at the bottom), then her, then every "+" on
-  // top of her, then the gift
+  // tapping: the spots first (the big wall and floor at the bottom), then her, then every "+" on top of her
   for (const spot of R.spots) {
     const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
     buttons.push({ x: ox + (at.x + bx) * k, y: oy + (at.y + by) * k, w: bw * k, h: bh * k, onTap: () => openPicker(spot) });
   }
   const pb = petBox();
-  buttons.push(Object.assign(pb, { onTap: () => (holder && !p.move ? openGift() : petCat()) }));
+  buttons.push(Object.assign(pb, { onTap: petCat }));
   for (const [spot, mx, my] of pluses) {
     const r = Math.max(20, 14 * k);                               // a fingertip, even where the "+" is small
     buttons.push({ x: ox + mx * k - r, y: oy + my * k - r, w: r * 2, h: r * 2, onTap: () => openPicker(spot) });
   }
-  if (holder && !p.move) {
-    const gw = Math.max(48, giftS * 1.3 * k), gx0 = ox + giftX * k, gy0 = oy + (PET_FEET - giftS * 0.5) * k;
-    buttons.push({ x: gx0 - gw / 2, y: gy0 - gw / 2, w: gw, h: gw, onTap: openGift });
-  }
-  if (holder && !overlay && oy + RH * k + 22 < tb - 56) fitLabel(t("open_gift"), W / 2, oy + RH * k + 14, 13, W - 40, SOFT, 800);   // only where it fits
 
   const bw = Math.min(170, (W - 32 - 10) / 2);
   pillButton(W / 2 - bw - 5, tb - 56, bw, 46, t("gift_week"), () => { overlay = { kind: "calendar", t: 1, delay: 0, at: time }; }, false);
@@ -961,7 +951,7 @@ function drawGiftCard() {
   if (time - o.at < 0.3) buttons = [];                                  // the tap that opened it can't also close it
 }
 
-/* ---------- the gift week: 7 days, day 7 a big present ---------- */
+/* ---------- the gift week: 7 days, one for each Daily nap won; day 7 a big present ---------- */
 function drawCalendar() {
   const o = overlay;
   buttons = [];
@@ -971,8 +961,9 @@ function drawCalendar() {
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
   label(t("cal_title"), W / 2, y + 34, 22, INK, 900);
-  // A finished week shows full until the next gift is ready; then a new week starts.
-  const shown = S.gift.day >= 7 && giftReady() ? 0 : S.gift.day, ready = giftReady();
+  // The days she won the Daily nap this week. A finished week shows full until the next day; then a new
+  // week starts. The next box says Today until today's Daily nap is won, then Tomorrow.
+  const won = dailyDone(), shown = S.gift.day >= 7 && !won ? 0 : S.gift.day;
   for (let i = 0; i < 7; i++) {
     const row = i < 4 ? 0 : 1, col = i < 4 ? i : i - 4, wide = i === 6;
     const bx = x + 20 + col * (bs + gap), by = y + 58 + row * (bs + 18 + gap), bw = wide ? bs * 2 + gap : bs, bh = bs + 18;
@@ -985,7 +976,7 @@ function drawCalendar() {
       ctx.strokeStyle = "#2F9E5B"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.beginPath(); ctx.moveTo(cx - 9, cy - 10); ctx.lineTo(cx - 2, cy - 3); ctx.lineTo(cx + 10, cy - 17); ctx.stroke();
     } else drawPresent(cx, cy, wide ? Math.min(34, bs * 0.5) : Math.min(24, bs * 0.4), wide);
-    if (next) fitLabel(ready ? t("cal_today") : t("cal_next"), cx, by + 26, 10, bw - 6, "#9C3A00", 800);
+    if (next) fitLabel(won ? t("cal_next") : t("cal_today"), cx, by + 26, 10, bw - 6, "#9C3A00", 800);
   }
   const ty = y + 58 + 2 * (bs + 18 + gap) + 10;
   fitLabel(t("cal_tip"), W / 2, ty, 12, cw - 28, SOFT, 700);

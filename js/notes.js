@@ -10,7 +10,7 @@
    - If your words need a double quote inside them, type \" instead (or just use ' ).
    - Keep it short: about two lines on a phone (up to about 140 letters) reads best.
    - She sees a note the first time she finishes that chapter's last level,
-     and can read it again any time in My cat, then Album.
+     and can read it again any time in the Album tab, under Chapters.
    Example:
        "You are my favorite person in the whole world. Love, me.",   // 1
 =================================================================== */

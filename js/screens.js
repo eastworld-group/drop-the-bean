@@ -47,12 +47,10 @@ const hasTabs = () => ["home", "levels", "room", "album"].includes(screen) || (s
 // Switch tab: a quick 150ms fade (none with calm motion).
 function goTab(where) {
   if (where === "levels") showLevel(nextUnsolved());
-  if (where === "album") { albumTab = "pics"; albumPage = 0; }
+  if (where === "album") { albumTab = "chapters"; albumPage = 0; }
   go(where);
   fade = S.calm ? 0 : 0.6;
 }
-// The one small warm-gold dot allowed on the screen: the daily nap ready, else today's gift in the Room.
-function homeDot() { return S.setup && !dailyDone() ? "daily" : S.setup && giftReady() ? "room" : ""; }
 function tabIcon(id, cx, cy, k, col) {
   ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (id === "levels") {                                   // a little bed
@@ -78,7 +76,7 @@ function tabIcon(id, cx, cy, k, col) {
   }
 }
 function drawTabBar() {
-  const y = tabTop(), s = safeArea(), w = W / TABS.length, dot = homeDot();
+  const y = tabTop(), s = safeArea(), w = W / TABS.length;
   ctx.fillStyle = "rgba(20, 28, 90, 0.10)"; ctx.fillRect(0, y - 3, W, 3);
   ctx.fillStyle = "#FFFDF8"; ctx.fillRect(0, y, W, TAB_H + s.b);
   TABS.forEach(([id, key], i) => {
@@ -86,7 +84,6 @@ function drawTabBar() {
     if (mid) { ctx.fillStyle = on ? "#FFE9C7" : "#F3EEE6"; oval(cx, y + 22, 24, 20); ctx.fill(); }
     tabIcon(id, cx, y + 21, mid ? 1.15 : 1, on ? INK : "#7C84B0");
     fitLabel(t(key), cx, y + 47, 13, w - 4, on ? INK : SOFT, on ? 900 : 700);
-    if (dot === "room" && id === "room") { ctx.fillStyle = "#F2B33D"; oval(cx + 15, y + 9, 4.5, 4.5); ctx.fill(); }
     buttons.push({ x: w * i, y, w, h: TAB_H + s.b, onTap: () => { if (screen !== id) goTab(id); } });
   });
 }
@@ -154,9 +151,18 @@ function drawHome() {
     blink: bt >= 0 && bt < 0.18 ? Math.sin(bt / 0.18 * Math.PI) : 0, scale: squish,
     wag: S.calm || st < 0 || st > 1.2 ? 0 : Math.sin(st * 7) * 0.14 * Math.sin(st / 1.2 * Math.PI) });
   h.box = { cx, top: catY - cs * 0.5 };
+  // today's gift: after she wins the Daily nap, her cat holds a present at her paws (day 7: a golden one)
+  const gift = giftReady(), gs = Math.max(26, cs * 0.3), gpx = cx + cs * 0.24, gpy = cushY + cs * 0.02;
+  if (gift) {
+    const gl = ctx.createRadialGradient(gpx, gpy - gs * 0.5, gs * 0.2, gpx, gpy - gs * 0.5, gs * 1.1);
+    gl.addColorStop(0, "rgba(255, 220, 130, 0.5)"); gl.addColorStop(1, "rgba(255, 220, 130, 0)");
+    ctx.fillStyle = gl; oval(gpx, gpy - gs * 0.5, gs * 1.1, gs * 1.1); ctx.fill();
+    drawPresent(gpx, gpy, gs, S.gift.day === 7);
+  }
   for (const f of h.fx) { ctx.globalAlpha = clamp01(f.life / f.max); ctx.fillStyle = "#FF5C8A"; drawHeart(f.x, f.y, 16); ctx.globalAlpha = 1; }
-  fitLabel(catName(S.hero), cx, stageTop + stageH - (small ? 11 : 15), 15, W - 200, INK, 800);
-  buttons.push({ x: cx - cs * 0.36, y: catY - cs * 0.55, w: cs * 0.72, h: cs * 0.95, onTap: purrHome });
+  fitLabel(gift ? t("open_gift") : catName(S.hero), cx, stageTop + stageH - (small ? 11 : 15), 15, W - 200, gift ? "#9C3A00" : INK, 800);
+  buttons.push({ x: cx - cs * 0.36, y: catY - cs * 0.55, w: cs * 0.72, h: cs * 0.95, onTap: gift ? openGift : purrHome });
+  if (gift) buttons.push({ x: gpx - gs * 0.8, y: gpy - gs * 1.25, w: gs * 1.6, h: gs * 1.45, onTap: openGift });
   // the daily nap: a small pillow at the bottom left of the stage, glowing softly when it is ready
   const ready = !dailyDone(), px = 16 + 46, py = stageTop + stageH - 46, ps = small ? 44 : 56;
   if (ready) {
@@ -169,7 +175,6 @@ function drawHome() {
   ctx.strokeStyle = ready ? "#E0B866" : "#CFC6B8"; ctx.lineWidth = 2; ctx.stroke();
   ctx.fillStyle = ready ? "#E0A23A" : "#B9B2A6";                        // a little moon on it
   ctx.beginPath(); ctx.arc(px, py, ps * 0.14, 0.6, Math.PI * 2 - 0.6); ctx.arc(px + ps * 0.07, py, ps * 0.09, -1.05, 1.05, true); ctx.closePath(); ctx.fill();
-  if (homeDot() === "daily") { ctx.fillStyle = "#F2B33D"; oval(px + ps / 2 - 2, py - ps * 0.3 - 1, 5, 5); ctx.fill(); }
   const streak = dailyStreak();
   fitLabel(ready ? t("daily") : t("daily_done"), px, py + ps * 0.3 + 12, 13, 96, INK, 800);
   if (streak && !small) fitLabel(t("streak", streak), px, py + ps * 0.3 + 28, 13, 96, SOFT, 700);
@@ -224,24 +229,12 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
   rr(x, y, tw - 4, th - 4, th / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
   label(text, x + tw / 2 - 2, y + th / 2 - 1.5, Math.round(s * 0.2), INK);
   if (stars) for (let k = 0; k < 3; k++) drawStar(x + s / 2 + (k - 1) * s * 0.22, y + s * 0.86, s * 0.095, k < stars);
-  if (!gold && (n + 1) % CHAPTER_SIZE === 0) ribbon(x + s / 2, y + 2, s);   // the chapter's last level: a ribbon level, 1.5 times the coins
   if (stars && S.perfect[n]) {                               // 3 stars with no powerups: a paw stamp
     const pr = s * 0.15, px = x + s - pr * 0.8, py = y + pr * 0.8;
     ctx.fillStyle = "#B8234F"; oval(px, py + 1, pr + 1.5, pr + 1.5); ctx.fill();
     ctx.fillStyle = "#FF5C8A"; oval(px, py, pr, pr); ctx.fill();
     ctx.fillStyle = "#FFFFFF"; paw(px, py - pr * 0.05, pr * 0.95);
   }
-}
-
-// A small soft ribbon bow, standing still, centred on x, y (on top of a level bed).
-function ribbon(x, y, s) {
-  const k = s * 0.13;
-  ctx.lineJoin = "round"; ctx.lineWidth = Math.max(1.2, s * 0.025); ctx.strokeStyle = "#C2456E"; ctx.fillStyle = "#FF9DB5";
-  for (const d of [-1, 1]) {
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + d * k * 1.6, y - k * 0.9); ctx.lineTo(x + d * k * 1.6, y + k * 0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + d * k * 0.2, y + k * 0.3); ctx.lineTo(x + d * k * 0.8, y + k * 1.7); ctx.lineTo(x + d * k * 0.3, y + k * 1.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-  }
-  oval(x, y, k * 0.5, k * 0.5); ctx.fill(); ctx.stroke();
 }
 
 function drawLevels(next, y0, y1) {
@@ -274,13 +267,6 @@ function drawLevels(next, y0, y1) {
     const bx = x0 + (i % colsN) * (bs + gap), by = top + Math.floor(i / colsN) * (bs + gap);
     const down = pressedIn(bx, by, bs, bs) ? 4 : 0;
     const bob = n === next && !down && !S.calm ? Math.sin(time * 2.6) * 2.5 - 1 : 0;   // the next level gently bobs
-    if (n === next && S.roll >= 3) {                          // on a roll (3 perfect in a row): a soft warm glow behind it
-      const gcx = bx + bs / 2, gcy = by + down + bob + bs / 2, gr = bs * 0.92;
-      const g = ctx.createRadialGradient(gcx, gcy, bs * 0.3, gcx, gcy, gr);
-      const ga = S.calm ? 0.55 : 0.48 + 0.12 * Math.sin(time * 2);
-      g.addColorStop(0, `rgba(255, 210, 110, ${ga})`); g.addColorStop(1, "rgba(255, 210, 110, 0)");
-      ctx.fillStyle = g; oval(gcx, gcy, gr, gr); ctx.fill();
-    }
     levelBed(bx, by + down + bob, bs, n, S.stars[n] || 0, n === next, !!down);
     buttons.push({ x: bx, y: by, w: bs, h: bs + 4, onTap: () => startLevel(n) });
   }
@@ -305,7 +291,7 @@ function pickWear(slot, id) {
   const hat = slot === "hat", owned = hat ? S.hats : S.necks;
   const wear = () => { if (hat) S.hat = id; else S.neck = id; save(); };
   if (!id || owned.includes(id)) { tryOn = null; wear(); return; }
-  if (!tryOn || tryOn.slot !== slot || tryOn.id !== id) { tryOn = { slot, id }; toast(t("try_on")); sfx.peek(); return; }
+  if (!tryOn || tryOn.slot !== slot || tryOn.id !== id) { tryOn = { slot, id }; sfx.peek(); return; }   // the line under the grid says: tap again to buy
   const name = t((hat ? "hat_" : "neck_") + id), price = (hat ? HATS : NECKS).find(q => q.id === id).price;
   askBuy({ name, price, pic: [slot, id] }, () => { owned.push(id); tryOn = null; wear(); });
 }
@@ -772,24 +758,17 @@ function drawFloorCat(r, c, cat, sc) {
   if (gateShut(cat)) drawGate(cx, cy, cell * sc, skin(cat.gate));
 }
 
-// The small "x3" bubble over a bed, and the coin a long chain wins. They float up and fade;
-// with calm motion they stay still and only fade.
+// The small "x3" bubble over a bed. It floats up and fades; with calm motion it stays still and only fades.
 function drawPopups() {
   for (const p of popups) {
     const k = clamp01(p.t / p.life), a = k < 0.12 ? k / 0.12 : k > 0.6 ? (1 - k) / 0.4 : 1;
-    const y = p.y - (S.calm ? 0 : k * cell * (p.kind === "coin" ? 0.5 : 0.7));
+    const y = p.y - (S.calm ? 0 : k * cell * 0.7);
     ctx.globalAlpha = clamp01(a);
-    if (p.kind === "combo") {
-      const fs = Math.round(Math.max(13, Math.min(20, cell * 0.28))), bw = fs * 2.3, bh = fs * 1.5;
-      rr(p.x - bw / 2, y - bh / 2, bw, bh, bh / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
-      ctx.strokeStyle = "#F7B6C8"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#FFFFFF"; oval(p.x - bw * 0.22, y + bh * 0.62, fs * 0.16, fs * 0.16); ctx.fill(); ctx.stroke();   // a tiny bubble under it
-      label(p.text, p.x, y + 1, fs, "#C2456E", 900);
-    } else {
-      const pop = S.calm ? 1 : 0.6 + 0.4 * easeOutBack(clamp01(p.t / 0.3)), r = Math.max(7, Math.min(13, cell * 0.17)) * pop;
-      drawCoin(p.x - r * 0.6, y, r);
-      label(p.text, p.x + r * 0.9, y + 1, Math.round(Math.max(12, r * 1.3)), "#B8730A", 900, "left");
-    }
+    const fs = Math.round(Math.max(13, Math.min(20, cell * 0.28))), bw = fs * 2.3, bh = fs * 1.5;
+    rr(p.x - bw / 2, y - bh / 2, bw, bh, bh / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+    ctx.strokeStyle = "#F7B6C8"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#FFFFFF"; oval(p.x - bw * 0.22, y + bh * 0.62, fs * 0.16, fs * 0.16); ctx.fill(); ctx.stroke();   // a tiny bubble under it
+    label(p.text, p.x, y + 1, fs, "#C2456E", 900);
     ctx.globalAlpha = 1;
   }
 }
@@ -940,18 +919,21 @@ function drawGame() {
   drawPopups();
   drawGuide();
 
-  // powerups
+  // powerups: Hint and Treat, and the Hammer only where there are creaky boards to fix.
+  // (Snooze waits on the Time's up card, where it is needed.)
   const by = H - s.b - 92;
-  const pus = POWERUPS.filter(p => puOpen(p.id)), use = { hint: useHint, snooze: useSnooze, treat: useTreat, hammer: useHammer };
-  const step = Math.min(92, (W - 32 - 54) / Math.max(1, pus.length - 1));      // four still fit a narrow phone
+  const creakyHere = L.map.some(row => row.includes("c"));
+  const pus = POWERUPS.filter(p => p.id === "hint" || p.id === "treat" || (p.id === "hammer" && puOpen("hammer") && creakyHere));
+  const use = { hint: useHint, treat: useTreat, hammer: useHammer };
+  const step = Math.min(92, (W - 32 - 54) / Math.max(1, pus.length - 1));      // three still fit a narrow phone
   pus.forEach((p, i) => {
     const x = W / 2 + (i - (pus.length - 1) / 2) * step - 27, count = S.pu[p.id];
-    const off = p.id === "snooze" && !S.timer, think = p.id === "hint" && !!thinking;
+    const think = p.id === "hint" && !!thinking;
     if (aim === p.id || think) {                                       // the one being aimed (or thinking) wears a ring
       ctx.fillStyle = PU_ICON[p.id][1]; ctx.globalAlpha = 0.3 + 0.25 * beat; oval(x + 27, by + 29, 35, 35); ctx.fill(); ctx.globalAlpha = 1;
     }
     roundButton(x, by, 54, PU_ICON[p.id][0], use[p.id],
-      { color: PU_ICON[p.id][1], badge: think ? undefined : count > 0 ? count : "+", dim: off || (!!overlay && !(p.id === "snooze" && overlay.kind === "lose")) });
+      { color: PU_ICON[p.id][1], badge: think ? undefined : count > 0 ? count : "+", dim: !!overlay });
     if (think) {                                                       // thinking: three dots take the place of the count
       const bx = x + 54 - 6, bdy = by + 6;
       rr(bx - 16, bdy - 9, 32, 18, 9); ctx.fillStyle = INK; ctx.fill();
@@ -969,7 +951,7 @@ function drawGame() {
     rr(W / 2 - sw / 2, sy, sw, 52, 18); ctx.fillStyle = "rgba(37, 42, 92, 0.94)"; ctx.fill();
     fitLabel(t("stuck"), W / 2, sy + 17, 14, sw - 24, "#FFFFFF", 700);
     fitLabel(t("stuck2"), W / 2, sy + 36, 15, sw - 24, "#FFD86B", 800);
-  } else if (L.hint && !overlay) {                                     // words for the teaching levels
+  } else if (hintWordsShown() && !overlay) {                           // words for the first two teaching levels
     const lines = t(L.hint), hy = by - 52;
     if (Array.isArray(lines)) lines.forEach((line, i) => fitLabel(line, W / 2, hy + i * 22, 15, W - 28, INK, 700));
   }
@@ -1027,6 +1009,20 @@ function drawTwistCard() {
 const goHome = () => { showLevel(levelIndex + (overlay && overlay.kind === "win" && !isDaily ? 1 : 0)); go("home"); };
 
 const STAR_AT = [0.3, 0.6, 0.9];                                        // when each win star lands, in seconds
+// The news lines under the coins on a win card, the biggest first, two at most: something new
+// to choose (a cat, a room), then a gift or a treasure chest, then on a roll, then the daily
+// streak, then perfect. (A chapter's love note shows itself as she leaves the card.)
+function winNews(o) {
+  const news = [];
+  if (o.unlocked) news.push(t("new_cat", CATS[o.unlocked].name));
+  if (o.room) news.push(t("new_room", t("room_" + o.room)));
+  if (o.gift) news.push(t("gift", t("pu_" + o.gift)));
+  if (o.chest) news.push(t("chest_ready"));
+  if (o.roll) news.push(t("on_roll"));                                  // three or more perfect levels in a row
+  if (o.daily) news.push(t("streak_days", dailyStreak()));
+  if (o.perfect) news.push(t("perfect"));
+  return news.slice(0, 2);
+}
 function drawOverlay() {
   const o = overlay;
   if (o.kind === "roompick") return drawRoomPick();
@@ -1052,7 +1048,9 @@ function drawOverlay() {
     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
     ctx.fillStyle = c.color; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h); ctx.restore();
   }
-  const cw = Math.min(320, W - 40), ch = o.relax && !win ? 376 : 372;
+  // the news on a win card: two lines at most, the biggest first (see winNews)
+  const news = win ? winNews(o) : [], more = Math.max(0, news.length - 1) * 22;
+  const cw = Math.min(320, W - 40), ch = (o.relax && !win ? 376 : 372) + more;
   const x = (W - cw) / 2, y = Math.max(topY + 50, (H - ch) / 2 + 20) + (1 - a) * 40;
   ctx.globalAlpha = a;
 
@@ -1073,7 +1071,7 @@ function drawOverlay() {
     }
     // time left, and how stars are won
     const head = S.timer ? t("time_left", clock(o.left)) : t("relaxed_done");
-    fitLabel(head + (o.perfect ? ". " + t("perfect") : ""), W / 2, y + 148, 15, cw - 30, o.perfect ? "#B8234F" : INK, 800);
+    fitLabel(head, W / 2, y + 148, 15, cw - 30, INK, 800);
     fitLabel(S.timer ? (snoozed ? t("star_snooze") : t("star_rule")) : t("star_relaxed"), W / 2, y + 167, 12, cw - 30, SOFT, 700);
     // rewards
     const cy = y + 191, text = t("coins_won", o.coins);
@@ -1081,26 +1079,17 @@ function drawOverlay() {
     const tw = ctx.measureText(text).width;
     drawCoin(W / 2 - tw / 2 - 12, cy, 11);
     label(text, W / 2 + 12, cy + 1, 18, "#B8730A", 800);
-    const news = [];                                                  // the biggest news first; two at most
-    if (o.unlocked) news.push(t("new_cat", CATS[o.unlocked].name));
-    if (o.room) news.push(t("new_room", t("room_" + o.room)));
-    if (o.roll) news.push(t("on_roll"));                              // three or more perfect levels in a row
-    if (o.golden) news.push(t("golden"));
-    if (o.ribbon) news.push(t("ribbon_won"));
-    if (o.note >= 0) news.push(t("note_new"));
-    if (o.gift) news.push(t("gift", t("pu_" + o.gift)));
-    if (!news.length && o.daily) news.push(t("streak_days", dailyStreak()));
-    const extra = news.slice(0, 2).join("   ");
-    if (extra) fitLabel(extra, W / 2, y + 214, 14, cw - 30, "#D4620A", 800);
+    news.forEach((line, i) => fitLabel(line, W / 2, y + 214 + i * 22, 14, cw - 30, "#D4620A", 800));
     // The first time a chapter is finished, its love note shows before she moves on.
     const leave = fn => () => {
       if (o.note >= 0 && !o.noteShown) { o.noteShown = true; openNote(o.note, fn); } else fn();
     };
     const hasNext = levelIndex + 1 < LEVELS.length;
-    if (isDaily || !hasNext) pillButton(x + 28, y + 236, bw, 54, t("home"), leave(goHome), true);
-    else pillButton(x + 28, y + 236, bw, 54, t("next"), leave(() => startLevel(levelIndex + 1)), true);
-    if (!isDaily && hasNext) pillButton(x + 28, y + 306, bw, 44, t("home"), leave(goHome), false);
-    else pillButton(x + 28, y + 306, bw, 44, t("again"), leave(() => startLevel(levelIndex, isDaily)), false);
+    const b1 = y + 236 + more, b2 = y + 306 + more;
+    if (isDaily || !hasNext) pillButton(x + 28, b1, bw, 54, t("home"), leave(goHome), true);
+    else pillButton(x + 28, b1, bw, 54, t("next"), leave(() => startLevel(levelIndex + 1)), true);
+    if (!isDaily && hasNext) pillButton(x + 28, b2, bw, 44, t("home"), leave(goHome), false);
+    else pillButton(x + 28, b2, bw, 44, t("again"), leave(() => startLevel(levelIndex, isDaily)), false);
   } else {
     fitLabel(catsLeft === 1 ? t("need_bed1") : t("need_bed", catsLeft), W / 2, y + 96, 16, cw - 30, SOFT, 700);
     // a Snooze buys 30 more seconds and drops you back into the level
