@@ -317,7 +317,7 @@ function completeBed(bed) {
   const C = CATS[skin(bed.color)];                          // a small, short sparkle in the cat's own color
   for (const [r, c] of bedCells(bed)) burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "glint", C.fur === "#FFFFFF" ? C.dark : C.fur, 2);
   sfx.done(VOICE[skin(bed.color)]);                       // every full bed gets a meow, in that cat's own voice
-  sfx.tuckIn();                                             // and a quiet purr as its cover is pulled over
+  sfx.tuckIn();                                             // and a quiet happy purr as they wake
   let opened = false;
   for (const b of beds) if (b.lock === bed.id) {            // this bed was a key: its lock pops open
     burst(gx + (b.c + 0.5) * cell, gy + (b.r + 0.5) * cell, "spark", pairOf(b.id)[0], 12);

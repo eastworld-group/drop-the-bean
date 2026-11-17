@@ -711,14 +711,13 @@ function bedCenter(bed, ox, oy) {
 
 function drawBed(bed, lifted, intro) {
   const key = skin(bed.color), C = CATS[key], s = cell;
-  // A full bed (need 0) tucks its cats in: a soft cover in the bed's color is pulled across them,
-  // then the bed fades away, all within LEAVE (0.6 seconds). Calm motion: just a quick fade.
+  // A full bed (need 0): its cats wake up, sit up and cheer, the bed gives a happy little
+  // bounce, then it floats up and fades away, all within LEAVE (0.95 seconds).
   const going = bed.need === 0;
   const lt = going ? bed.leaveT : 0;
-  const wake = 0;                                             // the cats stay curled up asleep
-  const cover = going && !S.calm ? clamp01((lt - 0.12) / 0.26) : 0;
-  const fade = going ? (S.calm ? clamp01(lt / 0.3) : clamp01((lt - 0.4) / 0.2)) : 0;
-  let ox = gx + (bed.x + bed.nx) * s, oy = gy + (bed.y + bed.ny) * s - fade * s * 0.12;
+  const wake = going ? clamp01(lt / 0.3) : 0;
+  const fade = going ? clamp01((lt - 0.65) / 0.3) : 0;
+  let ox = gx + (bed.x + bed.nx) * s, oy = gy + (bed.y + bed.ny) * s - fade * s * 0.3;
   // a little life: a pop when picked up, a squish when put down, a shake when blocked
   let sx = 1, sy = 1;
   if (!S.calm) {
@@ -733,7 +732,7 @@ function drawBed(bed, lifted, intro) {
   }
   ctx.save();
   let grow = intro === undefined ? 1 : intro;
-  if (going) grow *= 1 - Math.sin(cover * Math.PI) * 0.03;      // a tiny settle as the cover goes over
+  if (going && !S.calm) grow *= 1 + Math.sin(clamp01(lt / 0.3) * Math.PI) * 0.1;   // a happy bounce as they wake
   grow *= 1 + bed.squash * 0.06;
   if (grow !== 1 || sx !== 1 || sy !== 1) {
     const [cx, cy] = bedCenter(bed, ox, oy);
@@ -765,17 +764,6 @@ function drawBed(bed, lifted, intro) {
       if (f) flying.push({ key, f, tx: cx, ty: cy, seed: bed.id * 3 + j });         // still hopping over: drawn above all beds
     }
   });
-
-  if (cover > 0) {                         // the cover, pulled across from the left, with a soft rolled edge
-    const [mr, mc] = bed.cells.reduce((m, [r, c]) => [Math.max(m[0], r), Math.max(m[1], c)], [0, 0]);
-    const bw = (mc + 1) * s, lead = ox + bw * cover;
-    ctx.save(); ctx.beginPath(); ctx.rect(ox - 2, oy - 2, lead - ox + 2, (mr + 1) * s + 4); ctx.clip();
-    ctx.fillStyle = C.bed; bedPath(ox, oy, bed.cells, pad + rim * 0.5, s * 0.24); ctx.fill();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";                // a quilted line or two
-    for (const [r, c] of bed.cells) { rr(ox + c * s + s * 0.2, oy + r * s + s * 0.46, s * 0.6, s * 0.08, s * 0.04); ctx.fill(); }
-    ctx.restore();
-    if (cover < 1) { rr(lead - s * 0.07, oy + pad + rim * 0.5, s * 0.14, (mr + 1) * s - 2 * (pad + rim * 0.5), s * 0.07); ctx.fillStyle = C.bedIn || C.light; ctx.fill(); }
-  }
 
   if (!going) {
     const [r0, c0] = bed.cells[0];

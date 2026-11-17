@@ -13,7 +13,7 @@ const INK = "#252A5C";
 const SOFT = "#5F6AA6";
 const FONT = 'ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif';
 const MEOW_COUNT = 3;                // meow sounds to choose from (MEOW_FILES, further down)
-const LEAVE = 0.6;                  // seconds a full bed takes to tuck its cats in under a cover and go
+const LEAVE = 0.95;                 // seconds a full bed takes to wake its cats, cheer and go
 const lerp = (a, b, v) => a + (b - a) * v;
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const easeOutBack = v => { const c = 1.70158; return 1 + (c + 1) * Math.pow(v - 1, 3) + c * Math.pow(v - 1, 2); };
