@@ -120,16 +120,4 @@ function drawKitchenBase() {
   rr(sh.x - 46, sh.y, 92, 9, 3); fs("#C98E58", "#8A5A2E", 2.4);
 }
 
-/* ---------- where cats can be in the kitchen ---------- */
-const KITCHEN_FLOOR = [[100, 334], [250, 338], [214, 380], [80, 420], [250, 428], [60, 372], [300, 372]];
-function kitchenPerches() {
-  const out = KITCHEN_FLOOR.map(([x, y]) => ({ x, y, depth: y, sleep: 0.35 }));
-  const at = s => SPOT_AT[s], put = s => S.room.put[s];
-  if (put("kfridge")) out.push({ x: at("kfridge").x, y: at("kfridge").y - 190, depth: 301, sleep: 0.85, high: true });   // cats love the top of the fridge
-  if (put("kcounter")) out.push({ x: at("kcounter").x + 44, y: at("kcounter").y - 90, depth: 301, sleep: 0.25, high: true });
-  if (put("ktable")) out.push({ x: at("ktable").x + 20, y: at("ktable").y - 62, depth: at("ktable").depth + 1, sleep: 0.4 });
-  if (put("krug")) out.push({ x: at("krug").x + 10, y: at("krug").y + 4, depth: at("krug").y + 4, sleep: 0.6 });
-  if (put("kbowl")) out.push({ x: at("kbowl").x - 38, y: at("kbowl").y, depth: at("kbowl").depth + 0.5, sleep: 0 });
-  return out;
-}
-ROOMS.push({ id: "kitchen", spots: KITCHEN_SPOTS, wallY: KWALL_Y, base: drawKitchenBase, perches: kitchenPerches });
+ROOMS.push({ id: "kitchen", spots: KITCHEN_SPOTS, wallY: KWALL_Y, base: drawKitchenBase });

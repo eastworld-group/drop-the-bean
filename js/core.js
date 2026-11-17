@@ -13,7 +13,7 @@ const INK = "#252A5C";
 const SOFT = "#5F6AA6";
 const FONT = 'ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif';
 const MEOW_COUNT = 3;                // meow sounds to choose from (MEOW_FILES, further down)
-const LEAVE = 0.95;                 // seconds a full bed takes to wake up, cheer and go
+const LEAVE = 0.6;                  // seconds a full bed takes to tuck its cats in under a cover and go
 const lerp = (a, b, v) => a + (b - a) * v;
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const easeOutBack = v => { const c = 1.70158; return 1 + (c + 1) * Math.pow(v - 1, 3) + c * Math.pow(v - 1, 2); };
@@ -291,7 +291,12 @@ function freshSave() {
     // stats: cats tucked in, seconds played, longest daily streak, gifts opened.
     notes: [], chests: [], gift: { last: "", day: 0, weeks: 0 }, stats: { cats: 0, time: 0, best: 0, gifts: 0 },
     // saving: when she last saved a backup (ms), how many levels she had then, the day she was last reminded
-    saved: { at: 0, levels: 0, reminded: "" } };
+    saved: { at: 0, levels: 0, reminded: "" },
+    // roll: perfect levels in a row now (3 stars, no powerups). rollBest: the most ever in a row.
+    roll: 0, rollBest: 0,
+    // twists: the twist cards she has seen (numbers into TWISTS in play.js). relaxSeen: the
+    // "Play without the clock?" offer was shown once.
+    twists: [], relaxSeen: false };
 }
 // Only the three meows that are kept. A save or code that chose one of the old ones gets Mrow.
 const fixMeow = v => (Number.isInteger(v) && v >= 0 && v < MEOW_COUNT ? v : 0);
@@ -321,6 +326,10 @@ function loadSave() {
   base.stats.best = Math.max(base.stats.best, base.daily.streak || 0);    // saves from before stats: the streak she has now
   base.gift = { last: String(base.gift.last || ""), day: Math.max(0, Math.min(7, Math.floor(Number(base.gift.day) || 0))), weeks: Math.max(0, Math.floor(Number(base.gift.weeks) || 0)) };
   base.roomView = [0, 1, 2].includes(base.roomView) ? base.roomView : 0;
+  base.roll = Math.max(0, Math.floor(Number(base.roll) || 0));          // saves from before the perfect streak: 0
+  base.rollBest = Math.max(base.roll, Math.floor(Number(base.rollBest) || 0));
+  base.twists = (Array.isArray(base.twists) ? base.twists : []).map(Number).filter((n, i, all) => Number.isInteger(n) && n >= 0 && n < 32 && all.indexOf(n) === i);
+  base.relaxSeen = !!base.relaxSeen;
   base.saved = { at: Math.max(0, Number(base.saved.at) || 0), levels: Math.max(0, Math.floor(Number(base.saved.levels) || 0)), reminded: String(base.saved.reminded || "") };
   delete base.theme;                                  // boards used to be chosen by hand: now each chapter has its own look
   for (const k of ["cats", "hats", "necks"]) if (!Array.isArray(base[k])) base[k] = [];
@@ -382,6 +391,9 @@ function makeCode() {
   data.cs = packBits(S.chests);                                      // chapter chests opened
   data.gf = [S.gift.last, S.gift.day, S.gift.weeks];
   data.st = [S.stats.cats, Math.floor(S.stats.time), S.stats.best, S.stats.gifts];
+  data.ro = [S.roll, S.rollBest];                                    // perfect levels in a row: now, and the best
+  data.tw = packBits(S.twists);                                      // twist cards seen
+  data.rx = S.relaxSeen ? 1 : 0;                                     // the relaxed-mode offer was shown
   const body = b64(new TextEncoder().encode(JSON.stringify(data)));
   return "BEAN-" + body + "-" + codeSum(body);
 }
@@ -459,6 +471,10 @@ function readCode(text) {
   out.gift = { last: /^\d{4}-\d\d-\d\d$/.test(String(gf[0] || "")) ? String(gf[0]) : "", day: count(gf[1], 7), weeks: count(gf[2], 99999) };
   const st = Array.isArray(d.st) ? d.st : [];
   out.stats = { cats: count(st[0], 1e9), time: count(st[1], 1e9), best: Math.max(count(st[2], 99999), out.daily.streak), gifts: count(st[3], 1e9) };
+  const ro = Array.isArray(d.ro) ? d.ro : [];                         // older codes have no "ro": no streak yet
+  out.roll = count(ro[0], 99999); out.rollBest = Math.max(out.roll, count(ro[1], 99999));
+  out.twists = unpackBits(d.tw, 32);                                  // older codes: no twist cards seen yet
+  out.relaxSeen = d.rx === 1;
   return out;
 }
 
@@ -576,6 +592,11 @@ const WORDS = {
     h_all: ["Everything at once.", "Take your time. You know all the tricks."],
     h_creaky: ["New: creaky boards break after a bed crosses them.", "Plan your path. A broken board is a hole."],
     h_oneway: ["New: arrow tiles go one way.", "A bed on an arrow can only move the way it points."],
+    h_yarn: ["New: yarn balls.", "A bed pushes a ball one square. A ball in a corner stays stuck."],
+    t_levels: "Levels", t_home: "Home", t_room: "Room", chapter_line: "Chapter {0}, {1} · {2} of {3}",
+    try_on: "Looks cute! Tap it again to buy it.",
+    on_roll: "On a roll!", twist_new: "A new twist!", ok: "OK", twists_met: "Twists you have met. Tap one to see it again.",
+    twists_none: "New twists you meet will show here.", relax_q: "Play without the clock?", ribbon_won: "Ribbon level: extra coins!",
     stuck: "The beds can't reach their cats now.", stuck2: "Undo or restart.",
     room: "My room", room_tip: "Tap a spot to decorate", room_none: "Nothing here", in_room: "In your room",
     chapters: "Chapters", chapter_n: "Chapter {0}", where: "Where I am", you_here: "You are here",
@@ -651,22 +672,25 @@ function loadMeows() {
   });
 }
 
-function meow(delay, pitch) {
+// o (optional): { vol, rate } to play it softer (vol 0 to 1) and higher (rate), for the cat chorus.
+function meow(delay, pitch, o) {
   if (!S.sound) return;
   const a = audio(); if (!a || a.state !== "running") return;
+  o = o || {};
+  const vol = o.vol === undefined ? 1 : o.vol, rate = o.rate || 1;
   const rec = meowBuffers[S.meow];
   if (rec) {                                       // the real recording, a little higher or lower for each cat
     const src = a.createBufferSource(), g = a.createGain();
     src.buffer = rec;
     const spread = MEOW_SPREAD[S.meow] || 0.4;
-    src.playbackRate.value = 1 - spread * 0.2 + ((pitch || 1) - 0.86) * spread;
-    g.gain.value = MEOW_GAIN[S.meow] || 0.6;
+    src.playbackRate.value = (1 - spread * 0.2 + ((pitch || 1) - 0.86) * spread) * rate;
+    g.gain.value = (MEOW_GAIN[S.meow] || 0.6) * vol;
     src.connect(g); g.connect(a.destination);
     src.start(a.currentTime + (delay || 0));
     return;
   }
   const t0 = a.currentTime + (delay || 0), dur = 0.5 + Math.random() * 0.12;
-  const f0 = 540 * (pitch || 1) * (0.97 + Math.random() * 0.06);
+  const f0 = 540 * (pitch || 1) * rate * (0.97 + Math.random() * 0.06);
   const osc = a.createOscillator(); osc.type = "sawtooth";
   osc.frequency.setValueAtTime(f0 * 0.72, t0);
   osc.frequency.linearRampToValueAtTime(f0 * 1.28, t0 + 0.13);
@@ -679,11 +703,11 @@ function meow(delay, pitch) {
   const body = a.createBiquadFilter(); body.type = "lowpass"; body.frequency.value = 1000;
   const g = a.createGain(), g2 = a.createGain();
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(0.55, t0 + 0.07);
-  g.gain.setValueAtTime(0.55, t0 + 0.28);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.001, 0.55 * vol), t0 + 0.07);
+  g.gain.setValueAtTime(Math.max(0.001, 0.55 * vol), t0 + 0.28);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   g2.gain.setValueAtTime(0.0001, t0);
-  g2.gain.exponentialRampToValueAtTime(0.07, t0 + 0.07);
+  g2.gain.exponentialRampToValueAtTime(Math.max(0.001, 0.07 * vol), t0 + 0.07);
   g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   osc.connect(mouth); mouth.connect(g); g.connect(a.destination);
   osc.connect(body); body.connect(g2); g2.connect(a.destination);
@@ -765,6 +789,14 @@ const sfx = {
   // a creaky board breaks
   crack:  () => playRec("crack") || sfx.crackTone(),
   crackTone: () => { tone(1500, 0.025, { type: "square", vol: 0.04 }); tone(420, 0.12, { to: 70, type: "sawtooth", vol: 0.08, delay: 0.015 }); tone(900, 0.03, { type: "square", vol: 0.03, delay: 0.07 }); tone(110, 0.16, { to: 60, vol: 0.08, delay: 0.05 }); },
+  // a yarn ball pushed along: a soft, low thump
+  yarn:   () => { tone(150, 0.09, { to: 95, vol: 0.05 }); tone(300, 0.05, { vol: 0.012, type: "triangle", delay: 0.01 }); },
+  // six cats in a row: two soft meows together, in harmony (a major third apart), quieter than a normal meow
+  chorus: pitch => { meow(0.05, pitch, { vol: 0.42 }); meow(0.09, pitch, { vol: 0.34, rate: 1.26 }); },
+  // the coin a long chain of cats wins
+  comboCoin: () => playRec("coin", { vol: 0.6 }) || sfx.coinTone(),
+  // a full bed's cover is pulled over its cats: a quiet purr under the chime and meow
+  tuckIn: () => playRec("purr", { vol: 0.32, delay: 0.12 }) || tone(90, 0.3, { vol: 0.03, delay: 0.12, attack: 0.08 }),
   place:  () => { tone(392, 0.08, { vol: 0.07, type: "triangle" }); tone(587, 0.12, { vol: 0.06, type: "triangle", delay: 0.07 }); },
 };
 

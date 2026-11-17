@@ -1,6 +1,6 @@
 // Keeps a copy of the game on the phone so it opens with no internet.
 // Online: fetch the newest files. Offline, or when the network is too slow: use the saved copy.
-const CACHE = "drop-the-bean-v12";
+const CACHE = "drop-the-bean-v13";
 // Music lives in its own store with a name that does not change, so a new version of the
 // game never throws away tracks she has already downloaded.
 const MUSIC_CACHE = "drop-the-bean-music";
@@ -8,7 +8,7 @@ const FILES = ["./", "index.html", "levels-data.js", "js/core.js", "js/art.js", 
   "js/garden.js", "js/garden-things.js", "js/notes.js", "js/album.js", "js/main.js",
   "manifest.webmanifest", "icon-180.png", "icon-512.png", "sounds/meow-mrow.wav", "sounds/meow-soft.wav", "sounds/meow-kitten.wav",
   // recorded sound effects (first picks only; see sounds/manifest.json)
-  "sounds/sfx-pickup.wav", "sounds/sfx-drop.wav", "sounds/sfx-bump.wav", "sounds/sfx-crack.wav", "sounds/sfx-tuck.wav", "sounds/sfx-star.wav",
+  "sounds/sfx-pickup.wav", "sounds/sfx-drop.wav", "sounds/sfx-bump.wav", "sounds/sfx-crack.wav", "sounds/sfx-tuck.wav", "sounds/sfx-tuck-2.wav", "sounds/sfx-star.wav",
   "sounds/sfx-win.wav", "sounds/sfx-coin.wav", "sounds/sfx-tap.wav", "sounds/sfx-purr.wav"];
 // Music files are bigger. Each one is saved the first time it is played.
 const isMusic = url => /\.(m4a|mp3)$/.test(new URL(url).pathname);

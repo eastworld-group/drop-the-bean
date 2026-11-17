@@ -111,7 +111,7 @@ function drawNote() {
   if (time - o.at < 0.3) buttons = [];
 }
 
-/* ---------- stickers: 20 things to collect. Each is worked out from what she has done ---------- */
+/* ---------- stickers: 21 things to collect. Each is worked out from what she has done ---------- */
 const levelsDone = () => Object.keys(S.stars).length;
 const chaptersDone = () => { let n = 0; for (let c = 0; c * CHAPTER_SIZE < LEVELS.length; c++) if (S.stars[c * CHAPTER_SIZE + CHAPTER_SIZE - 1]) n++; return n; };
 const perfectCount = () => Object.keys(S.perfect).length;
@@ -136,6 +136,7 @@ const STICKERS = [
   { id: "outfit", icon: "crown", col: "#D9920C", name: "Dressed up", how: "Get your first hat or neck thing", got: () => S.hats.length + S.necks.length >= 1 },
   { id: "chest", icon: "chest", col: "#B5652A", name: "Treasure", how: "Open a chapter chest: 3 stars on all 25 levels", got: () => S.chests.length >= 1 },
   { id: "giftweek", icon: "gift", col: "#FF7EB6", name: "Gift week", how: "Open all 7 gifts of a gift week", got: () => S.gift.weeks >= 1 },
+  { id: "roll", icon: "roll", col: "#E0732A", name: "On a roll", how: "3 perfect levels in a row: 3 stars, no powerups", got: () => S.rollBest >= 3 },
 ];
 // A round sticker. Not earned yet: a grey outline only.
 function drawSticker(st, x, y, r, got) {
@@ -145,6 +146,7 @@ function drawSticker(st, x, y, r, got) {
   ctx.fillStyle = ink; ctx.strokeStyle = ink;
   const k = r / 26;
   if (st.icon === "paw" || st.icon === "stamp") paw(x, y, 22 * k);
+  else if (st.icon === "roll") for (let i = 0; i < 3; i++) paw(x + (i - 1) * 11 * k, y + (1 - i) * 6 * k, 11 * k);   // three little paws in a row
   else if (st.icon === "num") label(st.num, x, y + 1, Math.round((st.num.length > 2 ? 17 : 21) * k), ink, 900);
   else if (st.icon === "star") { starPath(x, y, 15 * k); ctx.fill(); }
   else if (st.icon === "heart") drawHeart(x, y + 2 * k, 30 * k);
@@ -203,13 +205,12 @@ function albumGrid(count, colsN, cw, chh, gap, top, bottom, cellAt) {
 }
 function drawAlbum() {
   const s = safeArea();
-  roundButton(16, topY + 6, 44, "back", () => go("mycat"));
   starPill(W - 16 - 86, topY + 11);
   fitLabel(t("album"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
   const tabs = ["pics", "notes", "stickers", "stats"], tw = Math.max(60, Math.min(96, (W - 32 - 24) / 4));
-  tabs.forEach((id, i) => pillButton(W / 2 + (i - 1.5) * (tw + 8) - tw / 2, topY + 56, tw, 30, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
-    albumTab === id, { fill: "#FFFFFF", text: 0.44 }));
-  const top = topY + 100, bottom = H - s.b - 16;
+  tabs.forEach((id, i) => pillButton(W / 2 + (i - 1.5) * (tw + 8) - tw / 2, topY + 52, tw, 40, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
+    albumTab === id, { fill: "#FFFFFF", text: 0.34 }));
+  const top = topY + 104, bottom = tabTop() - 8;
   if (albumTab === "pics") {
     const colsN = W >= 400 ? 4 : 3, gap = 10, cw = Math.max(56, Math.min(100, (W - 32 - gap * (colsN - 1)) / colsN)), chh = cw * 1.05 + 18;
     const count = Math.min(MAX_CHAPTERS, Math.ceil(LEVELS.length / CHAPTER_SIZE));
@@ -235,8 +236,16 @@ function drawAlbum() {
       buttons.push({ x, y, w: rw, h: rh, onTap: () => openNote(n) });
     });
   } else if (albumTab === "stickers") {
+    // the twists she has met, in a row: tap one to see its card again
+    const met = TWISTS.map((_, i) => i).filter(i => S.twists.includes(i)), ts = Math.min(44, (W - 32) / 7 - 6);
+    fitLabel(met.length ? t("twists_met") : t("twists_none"), W / 2, top + 6, 13, W - 32, SOFT, 800);
+    met.forEach((i, j) => {
+      const tx = W / 2 + (j - (met.length - 1) / 2) * (ts + 6);
+      drawTwistPic(TWISTS[i][1], tx, top + 22 + ts / 2, ts);
+      buttons.push({ x: tx - ts / 2 - 3, y: top + 20, w: ts + 6, h: ts + 6, onTap: () => { overlay = { kind: "twist", tw: i, t: 1, delay: 0, at: time }; } });
+    });
     const colsN = W >= 400 ? 5 : 4, gap = 8, cw = Math.max(60, Math.min(84, (W - 24 - gap * (colsN - 1)) / colsN)), chh = cw * 0.72 + 22;
-    albumGrid(STICKERS.length, colsN, cw, chh, gap, top, bottom, (n, x, y) => {
+    albumGrid(STICKERS.length, colsN, cw, chh, gap, top + (met.length ? ts + 32 : 24), bottom, (n, x, y) => {
       const st = STICKERS[n], got = st.got(), r = cw * 0.3;
       drawSticker(st, x + cw / 2, y + r + 4, r, got);
       fitLabel(st.name, x + cw / 2, y + r * 2 + 16, 11, cw - 2, got ? INK : SOFT, 800);

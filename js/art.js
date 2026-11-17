@@ -134,14 +134,19 @@ function roundButton(x, y, size, icon, onTap, o) {
   if (!o.dim) buttons.push({ x: x - 4, y: y - 4, w: size + 8, h: size + 12, onTap });
 }
 
+// One button system: "primary" is orange and filled (the main thing to do), the rest are cream
+// with a warm outline, and o.quiet is plain text. o.fill can still tint a second button.
 function pillButton(x, y, w, h, label, onTap, primary, o) {
   o = o || {};
-  const down = !o.dim && pressedIn(x, y, w, h) ? 4 : 0;
+  const down = !o.dim && !o.quiet && pressedIn(x, y, w, h) ? 4 : 0;
   ctx.globalAlpha = o.dim ? 0.5 : 1;
-  if (!down) { rr(x, y + 5, w, h, h / 2); ctx.fillStyle = primary ? "#D4620A" : "#8FB4E3"; ctx.fill(); }
-  rr(x, y + down, w, h, h / 2); ctx.fillStyle = primary ? "#FF8A1F" : (o.fill || "#E6EEFF"); ctx.fill();
-  if (primary) { rr(x + 6, y + 4 + down, w - 12, h * 0.4, h * 0.2); ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.fill(); }
-  ctx.fillStyle = primary ? "#FFFFFF" : INK;
+  if (!o.quiet) {
+    if (!down) { rr(x, y + 5, w, h, h / 2); ctx.fillStyle = primary ? "#D4620A" : "#E2C9A2"; ctx.fill(); }
+    rr(x, y + down, w, h, h / 2); ctx.fillStyle = primary ? "#FF8A1F" : (o.fill || "#FFF8EC"); ctx.fill();
+    if (primary) { rr(x + 6, y + 4 + down, w - 12, h * 0.4, h * 0.2); ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.fill(); }
+    else { rr(x + 1, y + 1 + down, w - 2, h - 2, h / 2 - 1); ctx.strokeStyle = "#E9D3B0"; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+  ctx.fillStyle = primary ? "#FFFFFF" : o.quiet ? SOFT : INK;
   let size = Math.round(h * (o.text || 0.38));
   ctx.font = `800 ${size}px ${FONT}`;
   while (size > 10 && ctx.measureText(label).width > w - 20) { size--; ctx.font = `800 ${size}px ${FONT}`; }   // long words shrink to fit
@@ -391,13 +396,14 @@ function drawCat(cx, cy, s, key, o) {
   if (!o.noShadow) { ctx.fillStyle = "rgba(30, 40, 100, 0.16)"; oval(s * 0.02, s * 0.37, s * 0.34, s * 0.075); ctx.fill(); }
   ctx.translate(0, -hop);
 
-  const breathe = 1 + Math.sin(tt * 2.2) * 0.022 * (1 - w);
+  // o.breath: a slow breath while awake too (the big cat in the room). Asleep cats always breathe.
+  const breathe = 1 + Math.sin(tt * 2.2) * 0.022 * (1 - w) + Math.sin(tt * 1.5) * 0.014 * w * (o.breath || 0);
   const bx = lerp(0.06, 0, w) * s, by = lerp(0.1, 0.17, w) * s;
   const brx = lerp(0.34, 0.26, w) * s, bry = lerp(0.27, 0.22, w) * s;
   const hx = lerp(-0.09, 0, w) * s, hy = lerp(-0.09, -0.13, w) * s, hr = lerp(0.245, 0.27, w) * s;
 
   const tail = () => {
-    const wag = Math.sin(tt * 9) * 0.06 * w;
+    const wag = (o.wag === undefined ? Math.sin(tt * 9) * 0.06 : o.wag) * w;     // o.wag: the tail's sway set by the caller
     const p = (a, b) => lerp(a, b, w) * s;
     const ex = p(-0.2, 0.38) + wag * s, ey = p(0.29, -0.12);
     ctx.beginPath();
@@ -498,12 +504,16 @@ function drawCat(cx, cy, s, key, o) {
   ctx.fillStyle = "rgba(255, 105, 140, 0.42)";
   for (const d of [-1, 1]) { oval(hx + d * hr * 0.66, hy + hr * 0.4, hr * 0.2, hr * 0.12); ctx.fill(); }
 
-  // eyes: closed curves asleep, big and shiny awake
+  // eyes: closed curves asleep, big and shiny awake. o.blink (0 to 1) closes awake eyes for a
+  // moment; o.happy squints them into two little smiles (being petted).
   ctx.lineWidth = lw * 1.1;
-  const open = clamp01((w - 0.4) / 0.4);
+  const blink = clamp01(o.blink || 0), open = clamp01((w - 0.4) / 0.4) * (blink > 0.8 ? 0 : 1 - blink);
   for (const d of [-1, 1]) {
     const ex = hx + d * hr * 0.42, ey = hy + hr * 0.1;
-    if (open <= 0) {
+    if (o.happy && w > 0.4) {
+      ctx.strokeStyle = C.lid || C.face;
+      ctx.beginPath(); ctx.arc(ex, ey + hr * 0.08, hr * 0.17, 1.15 * Math.PI, 1.85 * Math.PI); ctx.stroke();
+    } else if (open <= 0) {
       ctx.strokeStyle = C.lid || C.face;
       ctx.beginPath(); ctx.arc(ex, ey - hr * 0.1, hr * 0.2, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
     } else {
@@ -522,7 +532,7 @@ function drawCat(cx, cy, s, key, o) {
   ctx.moveTo(hx - hr * 0.1, hy + hr * 0.34); ctx.lineTo(hx + hr * 0.1, hy + hr * 0.34); ctx.lineTo(hx, hy + hr * 0.47);
   ctx.closePath(); ctx.fill();
   ctx.strokeStyle = C.face; ctx.lineWidth = lw * 0.8;
-  if (open > 0.6) {
+  if (clamp01((w - 0.4) / 0.4) > 0.6) {                       // awake: an open smile (a blink does not close it)
     ctx.beginPath(); ctx.arc(hx, hy + hr * 0.52, hr * 0.16, 0, Math.PI); ctx.closePath();
     ctx.fillStyle = "#D1345B"; ctx.fill(); ctx.stroke();
   } else {
@@ -654,6 +664,33 @@ function drawArrowTile(x, y, s, way, TH, flash, r, c) {
   chevron(x + s / 2 + [0, 0, -1, 1][way] * s * 0.06, y + s / 2 + [-1, 1, 0, 0][way] * s * 0.06, s * 0.26 * k, way, flash > 0 ? "#C22B3F" : TH.tray);
 }
 
+/* ---------- yarn balls ----------
+   A round ball of soft rose yarn on the floor: no rim and no corners like a bed, no face like a
+   cat, never raised like a wall block. Wound lines cross it, and a little loose strand trails
+   on the floor. "rot" turns the wound lines as it rolls (the strand stays put). */
+const YARN = { ball: "#F6A9C0", dark: "#C9668A", line: "#DE7F9E", shine: "rgba(255, 255, 255, 0.5)" };
+function drawYarn(cx, cy, s, rot) {
+  const R = Math.max(3, s * 0.31);
+  ctx.fillStyle = "rgba(20, 28, 90, 0.16)"; oval(cx + R * 0.06, cy + R * 0.86, R * 0.92, R * 0.28); ctx.fill();   // its shadow
+  ctx.strokeStyle = YARN.dark; ctx.lineWidth = Math.max(1.4, s * 0.032); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(cx + R * 0.55, cy + R * 0.72);                 // the loose strand
+  ctx.bezierCurveTo(cx + R * 0.95, cy + R * 1.2, cx + R * 1.3, cy + R * 0.5, cx + R * 1.48, cy + R * 0.98); ctx.stroke();
+  ctx.fillStyle = YARN.dark; oval(cx, cy + Math.max(1, s * 0.025), R, R); ctx.fill();
+  ctx.fillStyle = YARN.ball; oval(cx, cy, R, R); ctx.fill();
+  ctx.save();
+  oval(cx, cy, R * 0.97, R * 0.97); ctx.clip();
+  ctx.translate(cx, cy); ctx.rotate(rot || 0);
+  ctx.strokeStyle = YARN.line; ctx.lineWidth = Math.max(1.1, s * 0.03);
+  for (const k of [-0.62, -0.2, 0.22]) {                                      // one band of wound lines
+    ctx.beginPath(); ctx.ellipse(0, k * R, R * 1.1, R * 0.5, 0.45, Math.PI * 0.05, Math.PI * 0.95); ctx.stroke();
+  }
+  for (const k of [0.35, 0.75]) {                                             // and a second band across it
+    ctx.beginPath(); ctx.ellipse(k * R, 0, R * 0.45, R * 1.05, 0.3, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.fillStyle = YARN.shine; oval(cx - R * 0.4, cy - R * 0.42, R * 0.24, R * 0.13, -0.6); ctx.fill();
+}
+
 /* ---------- beds ---------- */
 function bedPath(ox, oy, cells, inset, radius) {
   const s = cell, has = (r, c) => cells.some(([a, b]) => a === r && b === c);
@@ -674,11 +711,14 @@ function bedCenter(bed, ox, oy) {
 
 function drawBed(bed, lifted, intro) {
   const key = skin(bed.color), C = CATS[key], s = cell;
+  // A full bed (need 0) tucks its cats in: a soft cover in the bed's color is pulled across them,
+  // then the bed fades away, all within LEAVE (0.6 seconds). Calm motion: just a quick fade.
   const going = bed.need === 0;
   const lt = going ? bed.leaveT : 0;
-  const wake = going ? clamp01(lt / 0.3) : 0;
-  const fade = going ? clamp01((lt - 0.65) / 0.3) : 0;
-  let ox = gx + (bed.x + bed.nx) * s, oy = gy + (bed.y + bed.ny) * s - fade * s * 0.3;
+  const wake = 0;                                             // the cats stay curled up asleep
+  const cover = going && !S.calm ? clamp01((lt - 0.12) / 0.26) : 0;
+  const fade = going ? (S.calm ? clamp01(lt / 0.3) : clamp01((lt - 0.4) / 0.2)) : 0;
+  let ox = gx + (bed.x + bed.nx) * s, oy = gy + (bed.y + bed.ny) * s - fade * s * 0.12;
   // a little life: a pop when picked up, a squish when put down, a shake when blocked
   let sx = 1, sy = 1;
   if (!S.calm) {
@@ -693,7 +733,7 @@ function drawBed(bed, lifted, intro) {
   }
   ctx.save();
   let grow = intro === undefined ? 1 : intro;
-  if (going) grow *= 1 + Math.sin(clamp01(lt / 0.3) * Math.PI) * 0.1;
+  if (going) grow *= 1 - Math.sin(cover * Math.PI) * 0.03;      // a tiny settle as the cover goes over
   grow *= 1 + bed.squash * 0.06;
   if (grow !== 1 || sx !== 1 || sy !== 1) {
     const [cx, cy] = bedCenter(bed, ox, oy);
@@ -725,6 +765,17 @@ function drawBed(bed, lifted, intro) {
       if (f) flying.push({ key, f, tx: cx, ty: cy, seed: bed.id * 3 + j });         // still hopping over: drawn above all beds
     }
   });
+
+  if (cover > 0) {                         // the cover, pulled across from the left, with a soft rolled edge
+    const [mr, mc] = bed.cells.reduce((m, [r, c]) => [Math.max(m[0], r), Math.max(m[1], c)], [0, 0]);
+    const bw = (mc + 1) * s, lead = ox + bw * cover;
+    ctx.save(); ctx.beginPath(); ctx.rect(ox - 2, oy - 2, lead - ox + 2, (mr + 1) * s + 4); ctx.clip();
+    ctx.fillStyle = C.bed; bedPath(ox, oy, bed.cells, pad + rim * 0.5, s * 0.24); ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";                // a quilted line or two
+    for (const [r, c] of bed.cells) { rr(ox + c * s + s * 0.2, oy + r * s + s * 0.46, s * 0.6, s * 0.08, s * 0.04); ctx.fill(); }
+    ctx.restore();
+    if (cover < 1) { rr(lead - s * 0.07, oy + pad + rim * 0.5, s * 0.14, (mr + 1) * s - 2 * (pad + rim * 0.5), s * 0.07); ctx.fillStyle = C.bedIn || C.light; ctx.fill(); }
+  }
 
   if (!going) {
     const [r0, c0] = bed.cells[0];

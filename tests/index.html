@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Drop the Bean self-test</title>
+<!--
+  A hidden page for the game's owner: one tap replays every level and draws every screen.
+  Nothing in the game links here, and the game's offline list (sw.js) does not include it.
+  It runs the real game files inside a hidden frame, with a stand-in for the saved data,
+  so the player's real save is never read into the test or written to.
+-->
+<style>
+  :root {
+    --bg: #E3F4FF; --card: #FFFFFF; --ink: #252A5C; --soft: #5F6AA6; --line: #D6E2F5;
+    --orange: #FF8A1F; --orangeDark: #B9590A; --green: #1E7A3C; --greenBg: #E2F7E8;
+    --red: #B3261E; --redBg: #FDE7E5; --bar: #8FB4E3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 26px; margin: 4px 0 2px; font-weight: 900; }
+  .note { color: var(--soft); font-size: 14px; margin: 0 0 16px; }
+  .card { background: var(--card); border-radius: 18px; padding: 16px; margin: 0 0 14px; box-shadow: 0 3px 0 var(--line); }
+  #run { display: block; width: 100%; font: inherit; font-size: 22px; font-weight: 900; color: #fff;
+    background: var(--orange); border: 0; border-radius: 22px; padding: 18px; box-shadow: 0 5px 0 var(--orangeDark); cursor: pointer; }
+  #run:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--orangeDark); }
+  #run:disabled { background: #C9CFE6; box-shadow: 0 5px 0 #9AA3CC; cursor: default; }
+  #summary { display: none; font-weight: 800; font-size: 18px; }
+  #summary.pass { display: block; background: var(--greenBg); color: var(--green); }
+  #summary.fail { display: block; background: var(--redBg); color: var(--red); }
+  #summary ul { margin: 8px 0 0; padding-left: 20px; font-weight: 600; font-size: 14px; }
+  #summary li { margin: 4px 0; word-break: break-word; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button.small { font: inherit; font-weight: 800; font-size: 15px; color: var(--ink); background: #fff; border: 2px solid var(--bar);
+    border-radius: 14px; padding: 8px 14px; cursor: pointer; }
+  #progress { display: none; }
+  .bar { height: 16px; background: #EEF3FF; border-radius: 8px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--orange); transition: width 0.15s; }
+  #now { margin: 8px 0 0; font-weight: 800; }
+  #count { margin: 2px 0 0; color: var(--soft); font-size: 14px; }
+  #stageWrap { display: none; margin-top: 12px; }
+  #stageBox { overflow: hidden; border-radius: 10px; background: #BFE6FF; border: 2px solid var(--line); position: relative; }
+  #stage { transform-origin: 0 0; position: absolute; left: 0; top: 0; }
+  #stage iframe { display: block; border: 0; background: #BFE6FF; }
+  #stageLabel { font-size: 12px; color: var(--soft); margin-top: 4px; }
+  details { border-top: 2px solid #EEF3FF; padding: 8px 0; }
+  details:first-child { border-top: 0; }
+  summary { cursor: pointer; font-weight: 800; }
+  summary .ok { color: var(--green); }
+  summary .bad { color: var(--red); }
+  .list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; }
+  .list li { padding: 2px 0; word-break: break-word; }
+  .list li.f { color: var(--red); font-weight: 700; }
+  .list li.p { color: var(--soft); }
+  #results { display: none; }
+  #found { font-size: 13px; color: var(--soft); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Drop the Bean self-test</h1>
+  <p class="note">For checking an update before she plays it. This page is not linked from the game.
+    Your real save on this phone is never used or changed.</p>
+
+  <div class="card"><button id="run" type="button">Run all tests</button></div>
+
+  <div id="summary" class="card" role="status"></div>
+
+  <div id="progress" class="card">
+    <div class="bar"><div id="barFill"></div></div>
+    <p id="now">Getting ready</p>
+    <p id="count"></p>
+    <div id="stageWrap">
+      <div id="stageBox"><div id="stage"></div></div>
+      <div id="stageLabel"></div>
+    </div>
+  </div>
+
+  <div id="results" class="card">
+    <div class="row" style="justify-content: space-between; margin-bottom: 6px">
+      <strong>Results</strong>
+      <button id="copy" class="small" type="button">Copy report</button>
+    </div>
+    <div id="groups"></div>
+    <p id="found"></p>
+  </div>
+</main>
+<script src="selftest.js"></script>
+</body>
+</html>

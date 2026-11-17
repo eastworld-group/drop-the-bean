@@ -23,6 +23,13 @@ let stuckJob = null;                // the search that checks for that, a little
 let thinking = null;                // a hint being worked out, a little each frame (see hintTick)
 let memo = null;                    // the last whole solution found, and how far along it she is
 let combo = 0, lastTuckT = -9;      // cats tucked in one after another, and when the last one was
+// The chain of cats tucked in one after another: still going, the coins it has won this level,
+// where its last cat went to bed (for the coin), and whether the cat chorus has sung this level.
+let comboOpen = false, comboCoins = 0, comboAt = [0, 0], chorusDone = false;
+let popups = [];                    // the small "x3" bubbles and the combo coin, floating over the board
+// Yarn balls: "y" in a level's map. Each is { r, c, x, y, rot }: x and y follow r and c
+// smoothly, rot turns as it rolls. A ball never sits under a bed, a cat or on a special tile.
+let balls = [], lastPushT = -9;
 
 function go(where) {
   if (where === "home" && screen !== "home" && typeof maybeRemindSave === "function") setTimeout(maybeRemindSave, 600);
@@ -30,6 +37,7 @@ function go(where) {
   screen = where;
   fade = S.calm ? 0 : 1;
   overlay = null; paused = false; aim = null; thinking = null;
+  tryOn = null;                                       // a hat being tried on in My cat comes off
   layout();
 }
 
@@ -46,6 +54,18 @@ function layout() {
 
 function toast(text) { toastMsg = { text, t: 0 }; }
 
+/* ---------- twists ----------
+   Each twist has a card she sees once, the first time she opens the level that brings it in
+   (its "hint" words, and a small picture). The order is fixed: S.twists and the backup code
+   keep these numbers, so only add new twists at the end. */
+const TWISTS = [["h_rail", "rail"], ["h_lock", "lock"], ["h_blanket", "blanket"], ["h_gate", "gate"], ["h_creaky", "creaky"], ["h_oneway", "oneway"], ["h_yarn", "yarn"]];
+function closeTwist() {
+  const o = overlay;
+  if (!o || o.kind !== "twist") return;
+  if (!S.twists.includes(o.tw)) { S.twists.push(o.tw); save(); }
+  overlay = null;
+}
+
 /* ---------- starting a level ---------- */
 function makeBed(id, r, c, need) {
   const src = L.beds[id];
@@ -58,7 +78,7 @@ function makeBed(id, r, c, need) {
 function startLevel(i, asDaily) {
   levelIndex = i; L = LEVELS[i]; isDaily = !!asDaily; slides = 0;
   rows = L.rows; cols = L.cols;
-  walls = []; floorCats = []; creaky = []; oneway = []; holeT = {}; fixT = {}; arrowT = {}; catsLeft = 0;
+  walls = []; floorCats = []; creaky = []; oneway = []; holeT = {}; fixT = {}; arrowT = {}; catsLeft = 0; balls = []; lastPushT = -9;
   for (let r = 0; r < rows; r++) {
     walls[r] = []; floorCats[r] = []; creaky[r] = []; oneway[r] = [];
     for (let c = 0; c < cols; c++) {
@@ -66,7 +86,8 @@ function startLevel(i, asDaily) {
       walls[r][c] = ch === "#";
       creaky[r][c] = ch === "c" ? 1 : 0;                 // "c" is a creaky board: floor, not a cat
       oneway[r][c] = ARROWS.indexOf(ch);                 // "^ v < >" are one-way floor: floor, not cats, and they never break
-      floorCats[r][c] = (".#c^v<>".indexOf(ch) < 0) ? { color: ch, seed: Math.random() * 10, hidden: false, gate: null, peek: 1 } : null;
+      if (ch === "y") balls.push(newBall(r, c));         // "y" is a yarn ball: floor, not a cat
+      floorCats[r][c] = (".#c^v<>y".indexOf(ch) < 0) ? { color: ch, seed: Math.random() * 10, hidden: false, gate: null, peek: 1 } : null;
       if (floorCats[r][c]) catsLeft++;
     }
   }
@@ -78,9 +99,13 @@ function startLevel(i, asDaily) {
   timeLeft = L.time; timerOn = false; lastTick = 0; introT = 0;
   meterStars = 3; meterJump = -9; snoozed = false; usedPowerup = false;
   stuck = false; stuckJob = null; memo = null; combo = 0; lastTuckT = -9;
+  comboOpen = false; comboCoins = 0; chorusDone = false; popups = [];
   go("game");
   setGuide(L.guide || []);
   peekAround(true);
+  // the first time she meets a twist: a small card that shows it, before she plays
+  const tw = TWISTS.findIndex(x => x[0] === L.hint);
+  if (tw >= 0 && !S.twists.includes(tw)) overlay = { kind: "twist", tw, t: 1, delay: 0, at: time };
   if (i >= HAMMER_AT && !S.hammerGot) {                    // she reached level 501: the Hammer shows up, with 2 to start
     S.hammerGot = true; S.pu.hammer = (S.pu.hammer || 0) + 2; save();
     toast(t("hammer_new"));
@@ -114,7 +139,8 @@ function snapshot() {
     beds: beds.map(b => ({ id: b.id, r: b.r, c: b.c, need: b.need })),
     cats: floorCats.map(row => row.map(c => c ? { color: c.color, seed: c.seed, hidden: c.hidden, gate: c.gate, peek: 1 } : null)),
     boards: creaky.map(row => row.slice()),              // broken boards come back on undo
-    catsLeft, slides,
+    balls: balls.map(b => [b.r, b.c]),                   // and yarn balls go back where they were
+    catsLeft, slides, comboCoins,
   };
 }
 function undo() {
@@ -123,6 +149,10 @@ function undo() {
   beds = s.beds.map(b => makeBed(b.id, b.r, b.c, b.need));
   floorCats = s.cats; catsLeft = s.catsLeft; slides = s.slides;        // a Treat's 4 extra slides go back with it
   if (s.boards) creaky = s.boards;
+  if (s.balls) balls = s.balls.map(([r, c]) => newBall(r, c));
+  // a step back ends a chain of cats without its coins, and takes back coins won after the snapshot
+  comboOpen = false; combo = 0; lastTuckT = -9; popups = [];
+  if (s.comboCoins !== undefined) comboCoins = s.comboCoins;
   stuck = false; stuckJob = null; thinking = null; memo = null;
   if (s.treat) { S.pu.treat++; save(); }                               // undoing a Treat hands the Treat back (its count goes up)
   if (s.hammer) { S.pu.hammer++; save(); }                             // and undoing a Hammer hands the Hammer back
@@ -160,7 +190,23 @@ function arrowsRefuse(bed, dr, dc) {
 }
 const onArrow = cells => cells.some(([r, c]) => oneway[r] && oneway[r][c] >= 0);
 // A level where one careless slide can ruin it: creaky boards or one-way floor.
-const tricky = () => !!L && L.map.some(row => /[c^v<>]/.test(row));
+// Yarn balls too: a ball pushed into a corner stays stuck.
+const tricky = () => !!L && L.map.some(row => /[c^v<>y]/.test(row));
+
+/* ---------- yarn balls ----------
+   When a bed slides one cell, every ball in a cell it newly covers is pushed one cell further
+   the same way. The ball may only go onto plain floor inside the board: no wall, hole, creaky
+   board, arrow tile, cat, bed (the moving bed's new cells count), and no other ball (no pushing
+   two at once). If any ball cannot go, the bed does not slide. Balls never disappear.
+   The search (makeSearch) follows the same rule, with "y" in its board string. */
+const newBall = (r, c) => ({ r, c, x: c, y: r, rot: Math.random() * 6 });
+const ballAt = (r, c) => balls.findIndex(b => b.r === r && b.c === c);
+function ballCanGo(r, c, bed, dr, dc) {
+  if (r < 0 || c < 0 || r >= rows || c >= cols) return false;
+  if (walls[r][c] || creaky[r][c] || oneway[r][c] >= 0 || floorCats[r][c] || ballAt(r, c) >= 0) return false;
+  if (bedAtCell(r, c, bed)) return false;
+  return !bed.cells.some(([sr, sc]) => bed.r + dr + sr === r && bed.c + dc + sc === c);
+}
 
 // Can this bed slide one cell? Returns the cats it would tuck in, or null if blocked.
 function canStep(bed, dr, dc) {
@@ -183,6 +229,15 @@ function canStep(bed, dr, dc) {
     }
   }
   if (got.length > bed.need) return null;
+  // yarn balls in the way: each is pushed one cell on, or the slide is refused.
+  // (A ball is never under a bed, so any ball in the cells it slides into is newly covered.)
+  got.balls = [];
+  if (balls.length) for (const [sr, sc] of bed.cells) {
+    const r = bed.r + dr + sr, c = bed.c + dc + sc, k = ballAt(r, c);
+    if (k < 0) continue;
+    if (!ballCanGo(r + dr, c + dc, bed, dr, dc)) return null;
+    got.balls.push([k, r + dr, c + dc]);
+  }
   return got;
 }
 
@@ -227,10 +282,15 @@ function doStep(bed, dr, dc) {
   if (memo && memo.at < memo.path.length && memo.path[memo.at][0] === bed.id && memo.path[memo.at][1] === dr && memo.path[memo.at][2] === dc) memo.at++;
   else memo = null;
   bed.r += dr; bed.c += dc; slides++;
+  for (const [k, r, c] of got.balls) { balls[k].r = r; balls[k].c = c; }        // yarn balls roll on ahead of the bed
+  if (got.balls.length) { lastPushT = time; sfx.yarn(); }
   if (got.length) {
-    combo = time - lastTuckT < 1.5 ? combo + 1 : 0;       // one cat right after another: each note a step higher
+    const goingOn = time - lastTuckT < 1.5;
+    if (!goingOn) endCombo();                              // the last chain ran out (its coin, if it earned one)
+    combo = goingOn ? combo + 1 : 0;                       // one cat right after another: each note a step higher
     lastTuckT = time;
     sfx.tuck(combo); bed.squash = 1;
+    comboStep(bed);
   } else sfx.slide();
   for (const [r, c] of got) tuck(bed, r, c);
   if (bed.need === 0) completeBed(bed);
@@ -243,7 +303,7 @@ function doStep(bed, dr, dc) {
   // still running. The check is the same sliced, capped search: it says something only when it
   // proves no way is left, and nothing if it gives up.
   const ontoCreaky = bed.need > 0 && bedCells(bed).some(([r, c]) => creaky[r] && creaky[r][c] === 1);
-  if (broke || pending || ontoCreaky || onArrow(before) || onArrow(bedCells(bed)) || (bed.need === 0 && creaky.some(row => row.includes(2)))) checkStuck();
+  if (broke || pending || ontoCreaky || got.balls.length || onArrow(before) || onArrow(bedCells(bed)) || (bed.need === 0 && creaky.some(row => row.includes(2)))) checkStuck();
   if (catsLeft === 0 && !overlay) finish("win", LEAVE + 0.1);
   return true;
 }
@@ -257,6 +317,7 @@ function completeBed(bed) {
   const C = CATS[skin(bed.color)];                          // a small, short sparkle in the cat's own color
   for (const [r, c] of bedCells(bed)) burst(gx + (c + 0.5) * cell, gy + (r + 0.5) * cell, "glint", C.fur === "#FFFFFF" ? C.dark : C.fur, 2);
   sfx.done(VOICE[skin(bed.color)]);                       // every full bed gets a meow, in that cat's own voice
+  sfx.tuckIn();                                             // and a quiet purr as its cover is pulled over
   let opened = false;
   for (const b of beds) if (b.lock === bed.id) {            // this bed was a key: its lock pops open
     burst(gx + (b.c + 0.5) * cell, gy + (b.r + 0.5) * cell, "spark", pairOf(b.id)[0], 12);
@@ -270,6 +331,45 @@ function completeBed(bed) {
     }
   }
   if (opened) sfx.unlock();
+}
+
+/* ---------- combos ----------
+   Cats tucked in one after another (each within 1.5 seconds of the last) make a chain; "combo"
+   counts from 0, so the chain is combo + 1 cats long. The rising notes are in sfx.tuck.
+   3 or more: a small "x3" bubble floats up from the bed. 6: two soft meows sing together, once
+   a level. When a chain of 5 or more ends, it wins 2 coins per cat past 4, shown as one coin. */
+const COMBO_COINS = n => (n >= 5 ? 2 * (n - 4) : 0);
+function comboStep(bed) {
+  const n = combo + 1, [x, y] = bedCenter(bed, gx + bed.c * cell, gy + bed.r * cell);
+  comboOpen = true; comboAt = [x, y];
+  if (n >= 3) {
+    popups = popups.filter(p => p.kind !== "combo");     // one bubble at a time: the newest
+    popups.push({ kind: "combo", text: "x" + n, x, y: y - cell * 0.35, t: 0, life: 1.1 });
+  }
+  if (n >= 6 && !chorusDone) { chorusDone = true; sfx.chorus(VOICE[skin(bed.color)]); }
+}
+function endCombo() {
+  if (!comboOpen) return;
+  comboOpen = false;
+  const add = COMBO_COINS(combo + 1);
+  if (!add) return;
+  comboCoins += add;
+  // beside the bed, so it never covers an "x" bubble that is still showing (a level that ends on a chain)
+  popups.push({ kind: "coin", text: "+" + add, x: comboAt[0] + cell * 0.55, y: comboAt[1] + cell * 0.1, t: 0, life: 1.3 });
+  sfx.comboCoin();
+}
+// Each frame (main.js update): yarn balls roll to their cells, popups float and fade,
+// and a chain ends once 1.5 seconds pass with no new cat.
+function playExtras(dt) {
+  const ease = Math.min(1, dt * 26);
+  for (const b of balls) {
+    const px = b.x, py = b.y;
+    b.x += (b.c - b.x) * ease; b.y += (b.r - b.y) * ease;
+    if (!S.calm) b.rot += ((b.x - px) + (b.y - py)) * 2.6;      // it rolls a little as it goes (not with calm motion)
+  }
+  for (const p of popups) p.t += dt;
+  popups = popups.filter(p => p.t < p.life);
+  if (comboOpen && time - lastTuckT >= 1.5) endCombo();
 }
 
 // Lift the blanket off any hidden cat that a bed is now next to.
@@ -307,6 +407,7 @@ function finish(kind, delay) {
   const stars = starsNow();
   overlay = { kind, stars, delay, t: 0, left: timeLeft, rang: false, coins: 0, gift: null, unlocked: null, daily: false, perfect: false,
     party: false, golden: false, note: -1, room: 0 };
+  if (kind === "lose" && S.timer && !S.relaxSeen) { overlay.relax = true; S.relaxSeen = true; save(); }   // offered once: play without the clock
   if (kind !== "win") return;
   const first = !S.stars[levelIndex], before = totalStars();
   const chapterEnd = (levelIndex + 1) % CHAPTER_SIZE === 0;
@@ -315,12 +416,18 @@ function finish(kind, delay) {
   overlay.party = first && chapterEnd;
   // the first time she finishes a chapter, a love note waits for her (shown as she leaves the card)
   if (first && chapterEnd && pageOf(levelIndex) < MAX_CHAPTERS && !S.notes.includes(pageOf(levelIndex))) overlay.note = pageOf(levelIndex);
-  S.stats.cats += L.map.join("").replace(/[.#c^v<>]/g, "").length;      // every cat in the level went to bed
+  S.stats.cats += L.map.join("").replace(/[.#c^v<>y]/g, "").length;      // every cat in the level went to bed
   const roomsBefore = [1, 2].filter(roomOpen);
   if ((S.stars[levelIndex] || 0) < stars) S.stars[levelIndex] = stars;     // stars already earned are never lowered
   if (stars === 3 && !usedPowerup) { S.perfect[levelIndex] = 1; overlay.perfect = true; }   // 3 stars with no powerups: a paw stamp on the home page
+  // perfect levels in a row: any win that is not perfect starts the count again (a lost level does not count)
+  S.roll = overlay.perfect ? S.roll + 1 : 0;
+  S.rollBest = Math.max(S.rollBest, S.roll);
+  overlay.roll = S.roll >= 3;
+  endCombo();                                                               // the last chain ends with the level
   let coins = first ? 10 + stars * 5 : 1;
   if (first && chapterEnd) coins += 50;                                     // finishing a chapter
+  if (first && chapterEnd && !isGolden(levelIndex)) { coins = Math.round(coins * 1.5); overlay.ribbon = true; }   // a ribbon level: 1.5 times the coins
   if (first && isGolden(levelIndex)) { coins *= 2; overlay.golden = true; }  // a golden finale: double coins
   if (isDaily && markDaily()) { coins += 40; overlay.daily = true; }
   if (first && (levelIndex + 1) % 10 === 0) {                              // a gift every tenth level
@@ -328,6 +435,7 @@ function finish(kind, delay) {
     const pu = open[Math.floor(Math.random() * open.length)].id;
     S.pu[pu]++; overlay.gift = pu;
   }
+  coins += comboCoins; overlay.combo = comboCoins;                         // coins won by chains of cats
   S.coins += coins; overlay.coins = coins;
   overlay.room = [1, 2].find(i => roomOpen(i) && !roomsBefore.includes(i)) || 0;   // a new room opened
   // enough stars for a new cat to choose in My cat?
@@ -375,9 +483,10 @@ function throwConfetti() {
    (hintTick), while the Hint button shows that it is thinking. */
 // One search over whole board states. Same rules as canStep and tools/levels.js slide():
 // walls, holes, other beds, rails, locks, gates, cats of other colors, creaky boards
-// breaking, and one-way floor.
+// breaking, one-way floor, and yarn balls pushed ahead of a bed.
 // P: { rows, cols, colors, shapes, axis, lock, gate, ow, pos, cats, only, whole, cap }
-//   cats: one character per cell: "#" a wall or a hole, "~" a creaky board, "." floor, else a cat's color.
+//   cats: one character per cell: "#" a wall or a hole, "~" a creaky board, "y" a yarn ball, "." floor,
+//   else a cat's color. Balls move, so where they are is part of each state (like the cats).
 //   ow: per cell, -1, or the only way a bed on it may slide (an index into DIRS4).
 //   whole = false: the shortest way to tuck in one more cat (any bed, or only bed "only").
 //   whole = true: a way to tuck in every cat. With "only" set, that bed alone moves until it
@@ -501,7 +610,7 @@ function makeSearch(P) {
   count = 1; isNew(0); pri[0] = 0; push(0);
   if (P.pos.every(p => p < 0)) out = whole ? { path: [] } : { none: true };
 
-  const occ = new Int8Array(N), eat = [];
+  const occ = new Int8Array(N), eat = [], roll = [];
   function expand(s) {
     const base = s * nb, cid0 = catsOf[s], cats = catsList[cid0], need = catsNeed[cid0], free = freeA[s], g = gA[s];
     const creaks = cats.indexOf("~") >= 0;
@@ -517,13 +626,21 @@ function makeSearch(P) {
         if ((axis[i] === "h" && dr) || (axis[i] === "v" && dc)) continue;
         const br = pr + dr, bc = pc + dc;
         let ok = true;
-        eat.length = 0;
+        eat.length = 0; roll.length = 0;
         for (const [sr, sc] of shapes[i]) {
           const r = br + sr, c = bc + sc;
           if (r < 0 || c < 0 || r >= rows || c >= cols) { ok = false; break; }
           const idx = r * cols + c, ch = cats[idx], from = idx - dr * cols - dc;
           if ((occ[idx] !== -1 && occ[idx] !== i) || ch === "#" || (gate[idx] >= 0 && posA[base + gate[idx]] >= 0)) { ok = false; break; }
           if ((ow[idx] >= 0 && ow[idx] !== d) || (ow[from] >= 0 && ow[from] !== d)) { ok = false; break; }   // one-way floor
+          if (ch === "y") {                                  // a yarn ball: pushed one cell on, onto plain floor only
+            const yr = r + dr, yc = c + dc, yi = yr * cols + yc;
+            if (yr < 0 || yc < 0 || yr >= rows || yc >= cols || cats[yi] !== "." || ow[yi] >= 0 || (occ[yi] !== -1 && occ[yi] !== i)) { ok = false; break; }
+            for (const [tr, tc] of shapes[i]) if ((br + tr) * cols + bc + tc === yi) { ok = false; break; }   // nor into this bed's new cells
+            if (!ok) break;
+            roll.push(idx, yi);
+            continue;
+          }
           if (ch !== "." && ch !== "~") { if (ch !== colors[i]) { ok = false; break; } eat.push(idx); }
         }
         if (!ok || eat.length > need[i]) continue;
@@ -533,6 +650,11 @@ function makeSearch(P) {
         // leaves, and the boards under it break too.
         let a = null;
         if (eat.length) { a = cats.split(""); for (const e of eat) a[e] = "."; }
+        if (roll.length) {
+          a = a || cats.split("");
+          for (let j = 0; j < roll.length; j += 2) a[roll[j]] = ".";
+          for (let j = 0; j < roll.length; j += 2) a[roll[j + 1]] = "y";
+        }
         if (creaks) for (const [sr, sc] of shapes[i]) {
           const from = (pr + sr) * cols + pc + sc, to = (br + sr) * cols + bc + sc;
           let still = false;
@@ -584,7 +706,7 @@ function boardForSearch(only, whole, cap) {
   let cats = "";
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const cat = floorCats[r][c], k = r * cols + c;
-    cats += walls[r][c] || creaky[r][c] === 2 ? "#" : cat ? cat.color : creaky[r][c] === 1 ? "~" : ".";
+    cats += walls[r][c] || creaky[r][c] === 2 ? "#" : cat ? cat.color : creaky[r][c] === 1 ? "~" : ballAt(r, c) >= 0 ? "y" : ".";
     if (cat && cat.gate) gate[k] = colors.indexOf(cat.gate);
     ow[k] = oneway[r][c];
   }

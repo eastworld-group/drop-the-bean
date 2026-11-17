@@ -102,18 +102,4 @@ function drawGardenBase() {
   PATTERNS[roomPut("gground")](0, GROUND_Y, RW, RH - GROUND_Y);
 }
 
-/* ---------- where cats can be in the garden ---------- */
-const GARDEN_FLOOR = [[150, 356], [214, 350], [300, 352], [60, 384], [190, 420], [276, 432], [330, 380]];
-function gardenPerches() {
-  const out = GARDEN_FLOOR.map(([x, y]) => ({ x, y, depth: y, sleep: 0.35 }));
-  const at = s => SPOT_AT[s], put = s => S.room.put[s];
-  if (put("gbench")) out.push({ x: at("gbench").x, y: at("gbench").y - 28, depth: at("gbench").depth + 1, sleep: 0.5 });
-  if (put("ghammock")) out.push({ x: at("ghammock").x, y: at("ghammock").y - 26, depth: at("ghammock").depth + 1, sleep: 0.95 });
-  if (put("gtree")) out.push(put("gtree") === "gt_house" ? { x: at("gtree").x + 30, y: at("gtree").y - 168, depth: at("gtree").depth + 1, sleep: 0.7, high: true }
-                                                        : { x: at("gtree").x + 34, y: at("gtree").y - 140, depth: at("gtree").depth + 1, sleep: 0.5, high: true });
-  if (put("gfence")) out.push({ x: 292, y: 200, depth: 263, sleep: 0.3, high: true });
-  if (put("gpond")) out.push({ x: at("gpond").x - 84, y: at("gpond").y + 6, depth: at("gpond").y + 6, sleep: 0.1 });
-  if (put("gtoy")) out.push({ x: at("gtoy").x + 36, y: at("gtoy").y - 2, depth: at("gtoy").depth + 0.5, sleep: 0, play: true });
-  return out;
-}
-ROOMS.push({ id: "garden", spots: GARDEN_SPOTS, wallY: GWALL_Y, base: drawGardenBase, perches: gardenPerches });
+ROOMS.push({ id: "garden", spots: GARDEN_SPOTS, wallY: GWALL_Y, base: drawGardenBase });

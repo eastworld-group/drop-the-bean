@@ -49,6 +49,7 @@ cv.addEventListener("pointermove", e => {
   lastInput = time;
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press.moved = true;
   if (drag && !overlay) dragTo(e.clientX, e.clientY);
+  if (screen === "room") roomStroke(e.clientX, e.clientY);          // stroking her cat in My room
   if (chapDrag && press.moved) {                      // dragging the chapter list
     const dt = Math.max(1 / 120, time - chapDrag.t);
     chapVel = lerp(chapVel, -(e.clientY - chapDrag.y) / dt, 0.5);
@@ -95,6 +96,7 @@ function update(dt) {
   if (toastMsg) { toastMsg.t += dt; if (toastMsg.t > 2) toastMsg = null; }
   if (screen === "room") roomUpdate(dt);
   if (screen === "chapters") chaptersUpdate(dt);
+  if (screen === "home") homeUpdate(dt);
   if (screen !== "game") return;
 
   introT += dt;
@@ -119,6 +121,7 @@ function update(dt) {
     for (const f of b.fills) f.t = Math.min(9, f.t + dt * 4);
   }
   for (const b of leaving) b.leaveT += dt;
+  playExtras(dt);                                                       // yarn balls rolling, combo bubbles and coins (play.js)
   leaving = leaving.filter(b => b.leaveT < LEAVE);
   for (const row of floorCats) for (const cat of row) if (cat && cat.peek < 1) cat.peek = Math.min(1, cat.peek + dt * 4);
   for (const f of effects) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 160 * dt; f.rot += dt * 5; }
@@ -157,7 +160,9 @@ function render() {
   else if (screen === "room") drawRoomScreen();
   else if (screen === "chapters") drawChapters();
   else if (screen === "album") drawAlbum();
+  else if (screen === "levels") drawLevelsTab();
   else drawShop();
+  if (hasTabs()) drawTabBar();                        // the five main screens share a tab bar at the bottom
   if (overlay && overlay.delay <= 0) drawOverlay();
   drawToast();
   if (fade > 0) { ctx.globalAlpha = fade * fade; ctx.fillStyle = look().bg[0]; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
@@ -176,9 +181,9 @@ function frame(now) {
   try { update(dt); } catch (e) { if (!frameError) { frameError = true; console.error(e); } }
   musicTick();
   // When nothing is moving and nobody is touching, draw less often to save battery.
-  const busy = drag || aim || thinking || stuckJob || fade > 0 || effects.length || leaving.length || confetti.length || toastMsg ||
+  const busy = drag || aim || thinking || stuckJob || fade > 0 || effects.length || popups.length || time - lastPushT < 0.6 || leaving.length || confetti.length || toastMsg ||
     (overlay && overlay.t < 2) || (screen === "game" && introT < 2) || time - lastInput < 2.5 ||
-    (screen === "room" && roomBusy()) || (screen === "chapters" && chapVel);
+    (screen === "room" && roomBusy()) || (screen === "home" && homeBusy()) || (screen === "chapters" && chapVel);
   if (busy || frameNo % 3 === 0) {
     try { render(); } catch (e) { resize(); if (!frameError) { frameError = true; console.error(e); } }   // resize() also resets the drawing state
   }

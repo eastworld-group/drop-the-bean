@@ -20,54 +20,176 @@ function fitLabel(text, x, y, size, maxW, color, weight) {
   while (size > 9 && ctx.measureText(text).width > maxW) { size--; ctx.font = `${weight || 700} ${size}px ${FONT}`; }
   label(text, x, y, size, color, weight || 700);
 }
-function cushion(x, y, s) {
+// A round cushion. "cols": its edge, top and middle colors (orange unless given).
+function cushion(x, y, s, cols) {
+  const [edge, top, mid] = cols || ["#B9590A", "#FF8A1F", "#FFE3B8"];
   ctx.fillStyle = "rgba(20, 28, 90, 0.18)"; oval(x, y + s * 0.08, s * 0.62, s * 0.3); ctx.fill();
-  ctx.fillStyle = "#B9590A"; oval(x, y + s * 0.02, s * 0.62, s * 0.3); ctx.fill();
-  ctx.fillStyle = "#FF8A1F"; oval(x, y, s * 0.56, s * 0.25); ctx.fill();
-  ctx.fillStyle = "#FFE3B8"; oval(x, y - s * 0.01, s * 0.44, s * 0.17); ctx.fill();
+  ctx.fillStyle = edge; oval(x, y + s * 0.02, s * 0.62, s * 0.3); ctx.fill();
+  ctx.fillStyle = top; oval(x, y, s * 0.56, s * 0.25); ctx.fill();
+  ctx.fillStyle = mid; oval(x, y - s * 0.01, s * 0.44, s * 0.17); ctx.fill();
 }
 
 /* ==================================================================
-   HOME: your cat, Play, the daily puzzle and the levels in pages of 25
+   HOME: a stage for her cat. A small logo, her cat big on a cushion in a
+   soft corner of her room, the daily nap pillow, the chapter she is in,
+   and one big Play button. The 25 level beds live in the Levels tab.
+   A tab bar sits at the bottom of the five main screens.
 =================================================================== */
-let page = -1;                                   // which block of 25 levels is showing
+let page = -1;                                   // which block of 25 levels is showing (Levels tab)
 const pageOf = i => Math.floor(i / CHAPTER_SIZE);
 function showLevel(i) { page = pageOf(Math.max(0, Math.min(LEVELS.length - 1, i))); }
 
-// The home screen is kept calm: only the next level's bed bobs (and the shapes far behind).
-// A short screen drops the napping cat, so the 25 beds still fit.
-function homeLayout() {
-  const compact = H < 600;
-  return compact ? { cat: 0, logoY: topY + 54, logo: 20, playY: topY + 72, playH: 42, dailyY: topY + 122, levelsY: topY + 156 }
-                 : { cat: 62, logoY: topY + 92, logo: 22, playY: topY + 112, playH: 46, dailyY: topY + 168, levelsY: topY + 208 };
+/* ---------- the tab bar ---------- */
+const TAB_H = 62;
+const TABS = [["levels", "t_levels"], ["mycat", "mycat"], ["home", "t_home"], ["room", "t_room"], ["album", "album"]];
+const tabTop = () => H - safeArea().b - TAB_H;          // where the tab bar starts: screens keep above it
+const hasTabs = () => ["home", "levels", "room", "album"].includes(screen) || (screen === "mycat" && S.setup);
+// Switch tab: a quick 150ms fade (none with calm motion).
+function goTab(where) {
+  if (where === "levels") showLevel(nextUnsolved());
+  if (where === "album") { albumTab = "pics"; albumPage = 0; }
+  go(where);
+  fade = S.calm ? 0 : 0.6;
+}
+// The one small warm-gold dot allowed on the screen: the daily nap ready, else today's gift in the Room.
+function homeDot() { return S.setup && !dailyDone() ? "daily" : S.setup && giftReady() ? "room" : ""; }
+function tabIcon(id, cx, cy, k, col) {
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (id === "levels") {                                   // a little bed
+    rr(cx - 12 * k, cy - 2 * k, 24 * k, 11 * k, 4 * k); ctx.stroke();
+    rr(cx - 9 * k, cy - 8 * k, 9 * k, 6 * k, 3 * k); ctx.fill();
+  } else if (id === "mycat") {                             // a cat face
+    ctx.beginPath(); ctx.moveTo(cx - 11 * k, cy + 2 * k); ctx.lineTo(cx - 10 * k, cy - 11 * k); ctx.lineTo(cx - 4 * k, cy - 6 * k);
+    ctx.lineTo(cx + 4 * k, cy - 6 * k); ctx.lineTo(cx + 10 * k, cy - 11 * k); ctx.lineTo(cx + 11 * k, cy + 2 * k);
+    ctx.quadraticCurveTo(cx, cy + 13 * k, cx - 11 * k, cy + 2 * k); ctx.stroke();
+    oval(cx - 4 * k, cy, 1.6 * k, 1.6 * k); ctx.fill(); oval(cx + 4 * k, cy, 1.6 * k, 1.6 * k); ctx.fill();
+  } else if (id === "home") {                              // a house
+    ctx.beginPath(); ctx.moveTo(cx - 12 * k, cy - 1 * k); ctx.lineTo(cx, cy - 12 * k); ctx.lineTo(cx + 12 * k, cy - 1 * k); ctx.stroke();
+    rr(cx - 8 * k, cy - 3 * k, 16 * k, 14 * k, 2 * k); ctx.stroke();
+    rr(cx - 2.5 * k, cy + 3 * k, 5 * k, 8 * k, 1.5 * k); ctx.fill();
+  } else if (id === "room") {                              // a sofa
+    rr(cx - 12 * k, cy - 6 * k, 24 * k, 9 * k, 3 * k); ctx.stroke();
+    rr(cx - 14 * k, cy - 1 * k, 28 * k, 9 * k, 3 * k); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 10 * k, cy + 8 * k); ctx.lineTo(cx - 10 * k, cy + 11 * k); ctx.moveTo(cx + 10 * k, cy + 8 * k); ctx.lineTo(cx + 10 * k, cy + 11 * k); ctx.stroke();
+  } else {                                                 // a photo
+    rr(cx - 12 * k, cy - 9 * k, 24 * k, 19 * k, 3 * k); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 9 * k, cy + 7 * k); ctx.lineTo(cx - 3 * k, cy); ctx.lineTo(cx + 1 * k, cy + 4 * k); ctx.lineTo(cx + 4 * k, cy + 1 * k); ctx.lineTo(cx + 9 * k, cy + 7 * k); ctx.stroke();
+    oval(cx + 5 * k, cy - 4 * k, 2 * k, 2 * k); ctx.fill();
+  }
+}
+function drawTabBar() {
+  const y = tabTop(), s = safeArea(), w = W / TABS.length, dot = homeDot();
+  ctx.fillStyle = "rgba(20, 28, 90, 0.10)"; ctx.fillRect(0, y - 3, W, 3);
+  ctx.fillStyle = "#FFFDF8"; ctx.fillRect(0, y, W, TAB_H + s.b);
+  TABS.forEach(([id, key], i) => {
+    const cx = w * (i + 0.5), on = screen === id || (id === "levels" && screen === "chapters"), mid = id === "home";
+    if (mid) { ctx.fillStyle = on ? "#FFE9C7" : "#F3EEE6"; oval(cx, y + 22, 24, 20); ctx.fill(); }
+    tabIcon(id, cx, y + 21, mid ? 1.15 : 1, on ? INK : "#7C84B0");
+    fitLabel(t(key), cx, y + 47, 13, w - 4, on ? INK : SOFT, on ? 900 : 700);
+    if (dot === "room" && id === "room") { ctx.fillStyle = "#F2B33D"; oval(cx + 15, y + 9, 4.5, 4.5); ctx.fill(); }
+    buttons.push({ x: w * i, y, w, h: TAB_H + s.b, onTap: () => { if (screen !== id) goTab(id); } });
+  });
+}
+
+/* ---------- top bar: coins (opens the Shop), stars, and a quiet gear (Settings) ---------- */
+let shopFrom = "home";
+function openShop(from) { shopFrom = from; go("shop"); }
+function topBar() {
+  coinPill(16, topY + 2);
+  buttons.push({ x: 16, y: topY, w: 86, h: 40, onTap: () => openShop(screen) });
+  starPill(W - 16 - 44 - 86, topY + 2);
+  const gx = W - 16 - 22, gy = topY + 19;                     // the gear
+  ctx.strokeStyle = SOFT; ctx.fillStyle = SOFT; ctx.lineWidth = 3.2; ctx.lineCap = "round";
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(gx + Math.cos(a) * 8, gy + Math.sin(a) * 8); ctx.lineTo(gx + Math.cos(a) * 12, gy + Math.sin(a) * 12); ctx.stroke(); }
+  ctx.lineWidth = 3; oval(gx, gy, 8, 8); ctx.stroke();
+  buttons.push({ x: gx - 22, y: topY, w: 44, h: 44, onTap: () => { overlay = { kind: "settings", t: 1, delay: 0 }; } });
+}
+
+/* ---------- the stage ---------- */
+// Her cat on the home stage: breathes, blinks, flicks her tail now and then; a tap makes her purr.
+const homeCat = { blinkAt: 2, swishAt: 5, squishT: -9, fx: [], box: null };
+function homeUpdate(dt) {
+  const h = homeCat;
+  if (time - h.blinkAt > 0.18) h.blinkAt = time + 6 + Math.random() * 4;
+  if (time - h.swishAt > 1.2) h.swishAt = time + 7 + Math.random() * 7;
+  for (const f of h.fx) { f.life -= dt; f.y += f.vy * dt; f.x += f.vx * dt; }
+  h.fx = h.fx.filter(f => f.life > 0);
+}
+const homeBusy = () => homeCat.fx.length > 0 || time - homeCat.squishT < 0.3;
+function purrHome() {
+  const h = homeCat, b = h.box;
+  h.squishT = time; sfx.purr();
+  const n = S.calm ? 1 : 3;
+  for (let i = 0; i < n; i++) h.fx.push({ x: b.cx + (i - (n - 1) / 2) * 26, y: b.top + 10, vx: (i - (n - 1) / 2) * 12, vy: S.calm ? 0 : -40 - i * 8, life: 1.1, max: 1.1 });
+}
+// A soft corner of her bedroom behind the stage: its wallpaper and floor, washed pale.
+function stageBackdrop(x, y, w, h) {
+  ctx.save(); rr(x, y, w, h, 26); ctx.clip();
+  const k = Math.max(0.8, w / RW * 1.25), floorAt = h * 0.68;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  (PATTERNS[roomPut("wall")] || PATTERNS.w_plain)(0, 0, w / k, floorAt / k);
+  (PATTERNS[roomPut("floor")] || PATTERNS.f_wood)(0, floorAt / k, w / k, (h - floorAt) / k + 2);
+  ctx.restore();
+  ctx.fillStyle = "rgba(255, 249, 238, 0.62)"; ctx.fillRect(x, y, w, h);
+  ctx.restore();
 }
 function drawHome() {
-  const s = safeArea(), hl = homeLayout();
-  coinPill(16, topY + 2); starPill(W - 16 - 86, topY + 2);
-
-  // your cat naps on a cushion
-  if (hl.cat) {
-    const ms = hl.cat, my = topY + 14;
-    cushion(W / 2, my + ms * 0.62, ms);
-    drawCat(W / 2, my + ms * 0.44, ms, S.hero, { seed: 1, noShadow: true, hat: S.hat, neck: S.neck, wake: 0, still: true });
+  const s = safeArea(), next = nextUnsolved(), small = H < 600, bottom = tabTop();
+  topBar();
+  logo("Drop the Bean", W / 2, topY + (small ? 56 : 64), small ? 17 : 21);
+  // from the bottom up: Play, then the chapter line, then the stage takes the rest
+  const playH = small ? 52 : 64, playY = bottom - (small ? 14 : 30) - playH;
+  const lineY = playY - (small ? 44 : 56), stageTop = topY + (small ? 74 : 86), stageH = Math.max(120, lineY - 10 - stageTop);
+  stageBackdrop(16, stageTop, W - 32, stageH);
+  // her cat, big, on a soft cushion, with a warm glow behind
+  const cs = Math.max(80, Math.min(W * 0.66, stageH * 0.66, 260)), cx = W / 2;
+  const cushY = stageTop + stageH - cs * 0.22 - (small ? 24 : 34), catY = cushY - cs * 0.4;
+  const g = ctx.createRadialGradient(cx, catY, cs * 0.1, cx, catY, cs * 0.75);
+  g.addColorStop(0, "rgba(255, 214, 140, 0.55)"); g.addColorStop(1, "rgba(255, 214, 140, 0)");
+  ctx.fillStyle = g; oval(cx, catY, cs * 0.75, cs * 0.75); ctx.fill();
+  cushion(cx, cushY, cs * 0.8, ["#C9667F", "#F6A9C0", "#FFE1EA"]);
+  const h = homeCat, bt = time - h.blinkAt, st = time - h.swishAt, sq = time - h.squishT;
+  const squish = !S.calm && sq < 0.2 ? 1 - Math.sin(sq / 0.2 * Math.PI) * 0.04 : 1;
+  drawCat(cx, catY, cs, S.hero, { wake: 1, hat: S.hat, neck: S.neck, noShadow: true, still: true, seed: 3, breath: S.calm ? 0 : 1,
+    blink: bt >= 0 && bt < 0.18 ? Math.sin(bt / 0.18 * Math.PI) : 0, scale: squish,
+    wag: S.calm || st < 0 || st > 1.2 ? 0 : Math.sin(st * 7) * 0.14 * Math.sin(st / 1.2 * Math.PI) });
+  h.box = { cx, top: catY - cs * 0.5 };
+  for (const f of h.fx) { ctx.globalAlpha = clamp01(f.life / f.max); ctx.fillStyle = "#FF5C8A"; drawHeart(f.x, f.y, 16); ctx.globalAlpha = 1; }
+  fitLabel(catName(S.hero), cx, stageTop + stageH - (small ? 11 : 15), 15, W - 200, INK, 800);
+  buttons.push({ x: cx - cs * 0.36, y: catY - cs * 0.55, w: cs * 0.72, h: cs * 0.95, onTap: purrHome });
+  // the daily nap: a small pillow at the bottom left of the stage, glowing softly when it is ready
+  const ready = !dailyDone(), px = 16 + 46, py = stageTop + stageH - 46, ps = small ? 44 : 56;
+  if (ready) {
+    const gl = ctx.createRadialGradient(px, py, ps * 0.2, px, py, ps * 0.9), ga = S.calm ? 0.5 : 0.4 + 0.15 * Math.sin(time * 2);
+    gl.addColorStop(0, `rgba(255, 220, 130, ${ga})`); gl.addColorStop(1, "rgba(255, 220, 130, 0)");
+    ctx.fillStyle = gl; oval(px, py, ps * 0.9, ps * 0.9); ctx.fill();
   }
-  logo("Drop the Bean", W / 2, hl.logoY, hl.logo);
-
-  const next = nextUnsolved();
-  const pw = Math.min(260, W - 72);
-  pillButton(W / 2 - pw / 2, hl.playY, pw, hl.playH, t("play", next + 1), () => startLevel(next), true);
-  // the daily nap: a small, quiet button
+  rr(px - ps / 2, py - ps * 0.3 + 3, ps, ps * 0.6, ps * 0.24); ctx.fillStyle = "rgba(20, 28, 90, 0.16)"; ctx.fill();
+  rr(px - ps / 2, py - ps * 0.3, ps, ps * 0.6, ps * 0.24); ctx.fillStyle = ready ? "#FFF3D6" : "#F3F0EA"; ctx.fill();
+  ctx.strokeStyle = ready ? "#E0B866" : "#CFC6B8"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = ready ? "#E0A23A" : "#B9B2A6";                        // a little moon on it
+  ctx.beginPath(); ctx.arc(px, py, ps * 0.14, 0.6, Math.PI * 2 - 0.6); ctx.arc(px + ps * 0.07, py, ps * 0.09, -1.05, 1.05, true); ctx.closePath(); ctx.fill();
+  if (homeDot() === "daily") { ctx.fillStyle = "#F2B33D"; oval(px + ps / 2 - 2, py - ps * 0.3 - 1, 5, 5); ctx.fill(); }
   const streak = dailyStreak();
-  const dLabel = (dailyDone() ? t("daily_done") : t("daily")) + (streak ? ".  " + t("streak", streak) : "");
-  const dw = Math.min(pw, Math.max(150, W * 0.5));
-  pillButton(W / 2 - dw / 2, hl.dailyY, dw, 28, dLabel, () => startLevel(dailyIndex(), true), false, { fill: "rgba(255, 255, 255, 0.7)", text: 0.46 });
+  fitLabel(ready ? t("daily") : t("daily_done"), px, py + ps * 0.3 + 12, 13, 96, INK, 800);
+  if (streak && !small) fitLabel(t("streak", streak), px, py + ps * 0.3 + 28, 13, 96, SOFT, 700);
+  buttons.push({ x: px - 44, y: py - ps * 0.5, w: 88, h: ps + 30, onTap: () => startLevel(dailyIndex(), true) });
 
-  drawLevels(next, hl.levelsY);
+  // the chapter she is in, with a thin bar: tapping it opens the Levels tab
+  const ch = pageOf(next), from = ch * CHAPTER_SIZE, done = LEVELS.slice(from, from + CHAPTER_SIZE).filter((_, i) => S.stars[from + i]).length;
+  fitLabel(t("chapter_line", ch + 1, chapterName(ch), done, Math.min(CHAPTER_SIZE, LEVELS.length - from)), W / 2, lineY + 10, 15, W - 40, INK, 800);
+  const bw = Math.min(200, W - 80);
+  rr(W / 2 - bw / 2, lineY + 24, bw, 6, 3); ctx.fillStyle = "rgba(20, 28, 90, 0.12)"; ctx.fill();
+  rr(W / 2 - bw / 2, lineY + 24, Math.max(6, bw * done / CHAPTER_SIZE), 6, 3); ctx.fillStyle = "#5C9E6E"; ctx.fill();
+  buttons.push({ x: W / 2 - bw / 2 - 20, y: lineY - 6, w: bw + 40, h: 44, onTap: () => goTab("levels") });
+  // the one big button
+  pillButton(W / 2 - 130, playY, 260, playH, t("play", next + 1), () => startLevel(next), true, { text: 0.36 });
+}
 
-  const ny = H - s.b - 62, nw = (W - 32 - 16) / 3;
-  pillButton(16, ny, nw, 46, t("mycat"), () => go("mycat"), false, { fill: "#FFFFFF" });
-  pillButton(16 + nw + 8, ny, nw, 46, t("room"), () => go("room"), false, { fill: "#FFFFFF" });
-  pillButton(16 + (nw + 8) * 2, ny, nw, 46, t("settings"), () => { overlay = { kind: "settings", t: 1, delay: 0 }; }, false, { fill: "#FFFFFF" });
+/* ---------- the Levels tab: the chapter banner and its 25 beds ---------- */
+function drawLevelsTab() {
+  topBar();
+  drawLevels(nextUnsolved(), topY + 52, tabTop() - 10);
 }
 
 // Each level is a little cat bed. Finished levels have a cat asleep in them;
@@ -102,6 +224,7 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
   rr(x, y, tw - 4, th - 4, th / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
   label(text, x + tw / 2 - 2, y + th / 2 - 1.5, Math.round(s * 0.2), INK);
   if (stars) for (let k = 0; k < 3; k++) drawStar(x + s / 2 + (k - 1) * s * 0.22, y + s * 0.86, s * 0.095, k < stars);
+  if (!gold && (n + 1) % CHAPTER_SIZE === 0) ribbon(x + s / 2, y + 2, s);   // the chapter's last level: a ribbon level, 1.5 times the coins
   if (stars && S.perfect[n]) {                               // 3 stars with no powerups: a paw stamp
     const pr = s * 0.15, px = x + s - pr * 0.8, py = y + pr * 0.8;
     ctx.fillStyle = "#B8234F"; oval(px, py + 1, pr + 1.5, pr + 1.5); ctx.fill();
@@ -110,12 +233,21 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
   }
 }
 
-function drawLevels(next, y0) {
-  const s = safeArea();
+// A small soft ribbon bow, standing still, centred on x, y (on top of a level bed).
+function ribbon(x, y, s) {
+  const k = s * 0.13;
+  ctx.lineJoin = "round"; ctx.lineWidth = Math.max(1.2, s * 0.025); ctx.strokeStyle = "#C2456E"; ctx.fillStyle = "#FF9DB5";
+  for (const d of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + d * k * 1.6, y - k * 0.9); ctx.lineTo(x + d * k * 1.6, y + k * 0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + d * k * 0.2, y + k * 0.3); ctx.lineTo(x + d * k * 0.8, y + k * 1.7); ctx.lineTo(x + d * k * 0.3, y + k * 1.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  oval(x, y, k * 0.5, k * 0.5); ctx.fill(); ctx.stroke();
+}
+
+function drawLevels(next, y0, y1) {
   const pages = Math.ceil(LEVELS.length / CHAPTER_SIZE);
   if (page < 0 || page >= pages) page = pageOf(next);
   const TH = look();                                        // the page being shown sets the colors of the whole screen
-  const y1 = H - s.b - 76;
 
   // which chapter, with arrows to turn the page
   roundButton(18, y0 + 2, 40, "back", () => { page--; }, { dim: page === 0 });
@@ -142,6 +274,13 @@ function drawLevels(next, y0) {
     const bx = x0 + (i % colsN) * (bs + gap), by = top + Math.floor(i / colsN) * (bs + gap);
     const down = pressedIn(bx, by, bs, bs) ? 4 : 0;
     const bob = n === next && !down && !S.calm ? Math.sin(time * 2.6) * 2.5 - 1 : 0;   // the next level gently bobs
+    if (n === next && S.roll >= 3) {                          // on a roll (3 perfect in a row): a soft warm glow behind it
+      const gcx = bx + bs / 2, gcy = by + down + bob + bs / 2, gr = bs * 0.92;
+      const g = ctx.createRadialGradient(gcx, gcy, bs * 0.3, gcx, gcy, gr);
+      const ga = S.calm ? 0.55 : 0.48 + 0.12 * Math.sin(time * 2);
+      g.addColorStop(0, `rgba(255, 210, 110, ${ga})`); g.addColorStop(1, "rgba(255, 210, 110, 0)");
+      ctx.fillStyle = g; oval(gcx, gcy, gr, gr); ctx.fill();
+    }
     levelBed(bx, by + down + bob, bs, n, S.stars[n] || 0, n === next, !!down);
     buttons.push({ x: bx, y: by, w: bs, h: bs + 4, onTap: () => startLevel(n) });
   }
@@ -152,6 +291,8 @@ function drawLevels(next, y0) {
    Three tabs share the space under the big cat: Cats, Hats, Neck.
 =================================================================== */
 let nameBox = null, catTab = "cats";
+// A hat or neck thing she does not own yet: the first tap tries it on the big cat, the second asks to buy it.
+let tryOn = null;
 function pickCat(k) {
   if (!catOpen(k)) { toast(t("cat_locked", CATS[k].name, CAT_STARS[k])); sfx.no(); return; }     // not enough stars yet
   S.hero = k; save();
@@ -163,28 +304,31 @@ function pickCat(k) {
 function pickWear(slot, id) {
   const hat = slot === "hat", owned = hat ? S.hats : S.necks;
   const wear = () => { if (hat) S.hat = id; else S.neck = id; save(); };
-  if (!id || owned.includes(id)) { wear(); return; }
+  if (!id || owned.includes(id)) { tryOn = null; wear(); return; }
+  if (!tryOn || tryOn.slot !== slot || tryOn.id !== id) { tryOn = { slot, id }; toast(t("try_on")); sfx.peek(); return; }
   const name = t((hat ? "hat_" : "neck_") + id), price = (hat ? HATS : NECKS).find(q => q.id === id).price;
-  askBuy({ name, price, pic: [slot, id] }, () => { owned.push(id); wear(); });
+  askBuy({ name, price, pic: [slot, id] }, () => { owned.push(id); tryOn = null; wear(); });
 }
 const pickHat = id => pickWear("hat", id);
 
 function drawMyCat() {
   const s = safeArea(), setup = !S.setup;
-  if (!setup) { roundButton(16, topY + 6, 44, "back", () => go("home")); coinPill(W - 16 - 86, topY + 11); }
+  if (!setup) { coinPill(16, topY + 11); buttons.push({ x: 16, y: topY + 9, w: 86, h: 40, onTap: () => openShop("mycat") }); }
   label(setup ? t("pick_cat") : t("mycat"), W / 2, topY + 28, 26, INK, 900);
+  if (catTab === "cats") tryOn = null;
 
   // Everything sits between the title and the Done button. The big cat takes
   // whatever room is left, and no size can drop below its smallest value.
-  const top = topY + 56, bottom = H - s.b - 76, room = bottom - top;
+  const top = topY + 56 + (H >= 700 ? 26 : 8), bottom = setup ? H - s.b - 76 : tabTop() - 10, room = bottom - top;   // headroom for a tall hat
   const roomy = room >= 380;                                 // short screens drop the two lines of small text
   const fixed = 58 + (roomy ? 42 : 0) + 46 + 50;
-  const ps = Math.max(56, Math.min(140, room - fixed - 2 * 78));
+  const ps = Math.max(56, Math.min(210, W * 0.56, room - fixed - 2 * 78));      // her cat, big: a live preview
   const cellH = Math.max(40, Math.min(72, (room - fixed - ps) / 2 - 6));
   let y = top + Math.max(0, Math.min(26, (room - fixed - ps - 2 * (cellH + 6)) / 2));
 
-  cushion(W / 2, y + ps * 0.68, ps);
-  drawCat(W / 2, y + ps * 0.48, ps, S.hero, { wake: 1, hat: S.hat, neck: S.neck, noShadow: true, seed: 3 });
+  cushion(W / 2, y + ps * 0.68, ps, ["#C9667F", "#F6A9C0", "#FFE1EA"]);
+  const tryHat = tryOn && tryOn.slot === "hat" ? tryOn.id : S.hat, tryNeck = tryOn && tryOn.slot === "neck" ? tryOn.id : S.neck;
+  drawCat(W / 2, y + ps * 0.48, ps, S.hero, { wake: 1, hat: tryHat, neck: tryNeck, noShadow: true, seed: 3, still: true, breath: S.calm ? 0 : 1 });
   y += ps + 8;
 
   // the name is a real text box placed over the canvas (see main.js)
@@ -201,9 +345,9 @@ function drawMyCat() {
   const tabs = ["cats", "hats", "neck"], tw = Math.max(40, Math.min(104, (W - 32 - 16) / 3));
   tabs.forEach((id, i) => {
     const x = W / 2 + (i - 1) * (tw + 8) - tw / 2;
-    pillButton(x, y, tw, 32, t("tab_" + id), () => { catTab = id; }, catTab === id, { fill: "#FFFFFF", text: 0.46 });
+    pillButton(x, y, tw, 40, t("tab_" + id), () => { catTab = id; }, catTab === id, { fill: "#FFFFFF", text: 0.38 });
   });
-  y += 46;
+  y += 52;
 
   // the grid for this tab: five across
   const items = catTab === "cats" ? HEROES.map(id => ({ id })) : [{ id: "" }].concat(catTab === "hats" ? HATS : NECKS);
@@ -222,9 +366,10 @@ function drawMyCat() {
       if (!owned) price = it.price;
       tap = () => pickWear(hat ? "hat" : "neck", it.id);
     }
+    const trying = !!tryOn && catTab !== "cats" && tryOn.id === it.id && tryOn.slot === (catTab === "hats" ? "hat" : "neck");
     rr(x - cw / 2 + 3, yy, cw - 6, cellH, 14);
-    ctx.fillStyle = on ? "#FFF0B3" : locked ? "rgba(255, 255, 255, 0.5)" : "#FFFFFF"; ctx.fill();
-    if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.fillStyle = on || trying ? "#FFF0B3" : locked ? "rgba(255, 255, 255, 0.5)" : "#FFFFFF"; ctx.fill();
+    if (on || trying) { ctx.strokeStyle = trying ? "#E0A23A" : "#FF8A1F"; ctx.lineWidth = 3; ctx.setLineDash(trying ? [5, 4] : []); ctx.stroke(); ctx.setLineDash([]); }
     const cs = Math.min(cw * 0.62, cellH * 0.54), ly = yy + cellH - 9;
     if (catTab === "cats") {
       ctx.globalAlpha = locked ? 0.5 : 1;
@@ -259,12 +404,8 @@ function drawMyCat() {
     }
   } else label(t("wear_tip"), W / 2, y + 12, 13, INK, 700);
 
+  // the first visit has a Start button; after that the tab bar takes you anywhere
   if (setup) pillButton(W / 2 - 120, H - s.b - 66, 240, 50, t("start"), () => { S.setup = true; save(); go("home"); }, true);
-  else {                                                     // the Album lives here, next to Done
-    const bw = Math.min(150, (W - 32 - 10) / 2);
-    pillButton(W / 2 - bw - 5, H - s.b - 66, bw, 50, t("album"), openAlbum, false, { fill: "#FFFFFF" });
-    pillButton(W / 2 + 5, H - s.b - 66, bw, 50, t("done"), () => go("home"), true);
-  }
 }
 
 /* ==================================================================
@@ -412,7 +553,7 @@ function buyPowerup(id) {
 }
 
 function drawShop() {
-  roundButton(16, topY + 6, 44, "back", () => go("room"));         // the shop is reached from My room
+  roundButton(16, topY + 6, 44, "back", () => go(shopFrom || "home"));     // back to where it was opened (coins, or My room)
   coinPill(W - 16 - 86, topY + 11);
   label(t("shop"), W / 2, topY + 28, 26, INK, 900);
 
@@ -495,7 +636,7 @@ function leftLabel(text, x, y, size, maxW, color) {
 }
 function drawChapters() {
   const s = safeArea(), box = chapListBox(), here = pageOf(nextUnsolved());
-  roundButton(16, topY + 6, 44, "back", () => go("home"));
+  roundButton(16, topY + 6, 44, "back", () => go("levels"));
   starPill(W - 16 - 86, topY + 11);
   fitLabel(t("chapters"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
   chapScroll = Math.max(0, Math.min(chapMax(), chapScroll));
@@ -515,7 +656,7 @@ function drawChapters() {
     leftLabel(mine ? t("chapter_n", n + 1) + ".  " + t("you_here") : t("chapter_n", n + 1), tx, y + 18 + down, 12, room, mine ? "#9C3A00" : SOFT);
     leftLabel(chapterName(n), tx, y + 38 + down, 16, room, INK);
     const top = Math.max(y, box.top), bottom = Math.min(y + h + 4, box.bottom);
-    if (bottom > top) buttons.push({ x: rx, y: top, w: rw, h: bottom - top, onTap: () => { page = n; go("home"); } });
+    if (bottom > top) buttons.push({ x: rx, y: top, w: rw, h: bottom - top, onTap: () => { page = n; go("levels"); } });
     if (chestReady(n)) {                                    // 3 stars on all 25: a treasure chest waits here
       const cx = rx + rw - starsW / 2, cy = y + h / 2 + down;
       drawChest(cx, cy + 4, 34, false);
@@ -533,7 +674,7 @@ function drawChapters() {
     ctx.fillStyle = g; ctx.fillRect(0, Math.min(y0, y0 + dir * 14), W, 14);
   }
   const pw = Math.min(260, W - 72);
-  pillButton(W / 2 - pw / 2, H - s.b - 64, pw, 48, t("where"), () => { page = here; go("home"); }, true);
+  pillButton(W / 2 - pw / 2, H - s.b - 64, pw, 48, t("where"), () => { page = here; go("levels"); }, true);
 }
 
 /* ==================================================================
@@ -631,6 +772,28 @@ function drawFloorCat(r, c, cat, sc) {
   if (gateShut(cat)) drawGate(cx, cy, cell * sc, skin(cat.gate));
 }
 
+// The small "x3" bubble over a bed, and the coin a long chain wins. They float up and fade;
+// with calm motion they stay still and only fade.
+function drawPopups() {
+  for (const p of popups) {
+    const k = clamp01(p.t / p.life), a = k < 0.12 ? k / 0.12 : k > 0.6 ? (1 - k) / 0.4 : 1;
+    const y = p.y - (S.calm ? 0 : k * cell * (p.kind === "coin" ? 0.5 : 0.7));
+    ctx.globalAlpha = clamp01(a);
+    if (p.kind === "combo") {
+      const fs = Math.round(Math.max(13, Math.min(20, cell * 0.28))), bw = fs * 2.3, bh = fs * 1.5;
+      rr(p.x - bw / 2, y - bh / 2, bw, bh, bh / 2); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+      ctx.strokeStyle = "#F7B6C8"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#FFFFFF"; oval(p.x - bw * 0.22, y + bh * 0.62, fs * 0.16, fs * 0.16); ctx.fill(); ctx.stroke();   // a tiny bubble under it
+      label(p.text, p.x, y + 1, fs, "#C2456E", 900);
+    } else {
+      const pop = S.calm ? 1 : 0.6 + 0.4 * easeOutBack(clamp01(p.t / 0.3)), r = Math.max(7, Math.min(13, cell * 0.17)) * pop;
+      drawCoin(p.x - r * 0.6, y, r);
+      label(p.text, p.x + r * 0.9, y + 1, Math.round(Math.max(12, r * 1.3)), "#B8730A", 900, "left");
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawGame() {
   const s = safeArea(), TH = look();
   // top row
@@ -692,6 +855,8 @@ function drawGame() {
     const sc = popIn(n++);
     if (sc > 0) drawFloorCat(r, c, cat, sc);
   }
+  // yarn balls sit on the floor, under the beds (a bed never covers one)
+  balls.forEach((b, i) => { const sc = popIn(n + i); if (sc > 0) drawYarn(gx + (b.x + 0.5) * cell, gy + (b.y + 0.5) * cell, cell * sc, b.rot); });
 
   // Aiming: the board dims and the things she can tap stay bright.
   const dimBoard = () => { rr(gx - m, gy - m, bw + m * 2, bh + m * 2, 24); ctx.fillStyle = "rgba(20, 26, 80, 0.45)"; ctx.fill(); };
@@ -772,6 +937,7 @@ function drawGame() {
     ctx.globalAlpha = 1;
   }
 
+  drawPopups();
   drawGuide();
 
   // powerups
@@ -809,6 +975,52 @@ function drawGame() {
   }
 }
 
+/* ---------- twist cards ---------- */
+// A small picture of a twist on a floor tile, centred on cx, cy, s wide.
+function drawTwistPic(kind, cx, cy, s) {
+  const TH = look(), x = cx - s / 2, y = cy - s / 2;
+  rr(x + 1.5, y + 1.5, s - 3, s - 3, s * 0.16); ctx.fillStyle = TH.tiles[0]; ctx.fill();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (kind === "creaky") drawPlank(x, y, s);
+  else if (kind === "oneway") drawArrowTile(x, y, s, 3, TH, 0, 0, 0);
+  else if (kind === "yarn") drawYarn(cx, cy - s * 0.04, s, 0.5);
+  else if (kind === "blanket") drawBlanket(cx, cy, s * 0.95, 1);
+  else if (kind === "gate") { drawCat(cx, cy, s * 0.9, "o", { still: true, noShadow: true, seed: 1 }); drawGate(cx, cy, s, "b"); }
+  else {                                                    // a little bed: rails (arrows) or a padlock with its key
+    const C = CATS[kind === "rail" ? "o" : "b"], m = s * 0.1;
+    rr(x + m, y + m, s - 2 * m, s - 2 * m, s * 0.24); ctx.fillStyle = C.dark; ctx.fill();
+    rr(x + m * 1.6, y + m * 1.6, s - 3.2 * m, s - 3.2 * m, s * 0.2); ctx.fillStyle = C.bed; ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    if (kind === "rail") {
+      rr(cx - s * 0.3, cy - s * 0.12, s * 0.6, s * 0.24, s * 0.12); ctx.fill();
+      ctx.fillStyle = C.dark;
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + d * s * 0.24, cy); ctx.lineTo(cx + d * s * 0.08, cy - s * 0.09); ctx.lineTo(cx + d * s * 0.08, cy + s * 0.09); ctx.closePath(); ctx.fill(); }
+    } else {
+      const [pc, pd] = PAIR[0], r = s * 0.2;
+      ctx.fillStyle = pd; oval(cx, cy + 1.5, r + 2, r + 2); ctx.fill(); ctx.fillStyle = pc; oval(cx, cy, r, r); ctx.fill();
+      ctx.strokeStyle = "#FFFFFF"; ctx.fillStyle = "#FFFFFF"; ctx.lineWidth = r * 0.22;
+      ctx.beginPath(); ctx.arc(cx, cy - r * 0.15, r * 0.3, Math.PI, 0); ctx.stroke();
+      rr(cx - r * 0.48, cy - r * 0.15, r * 0.96, r * 0.68, r * 0.16); ctx.fill();
+    }
+  }
+}
+// The card: a picture of the twist and its words, with an OK button.
+function drawTwistCard() {
+  const o = overlay, tw = TWISTS[o.tw];
+  buttons = [];
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.min(320, W - 40), x = (W - cw) / 2, words = t(tw[0]);
+  const lines = wrapLines(words[0], cw - 40, 17, 800).concat(wrapLines(words[1], cw - 40, 14, 700));
+  const ch = 214 + lines.length * 22 + 66, y = Math.max(topY + 4, (H - ch) / 2);
+  card(x, y, cw, ch);
+  label(t("twist_new"), W / 2, y + 36, 22, INK, 900);
+  drawTwistPic(tw[1], W / 2, y + 120, 96);
+  const first = wrapLines(words[0], cw - 40, 17, 800).length;
+  lines.forEach((line, i) => fitLabel(line, W / 2, y + 196 + i * 22, i < first ? 17 : 14, cw - 30, i < first ? INK : SOFT, i < first ? 800 : 700));
+  pillButton(x + 28, y + ch - 66, cw - 56, 48, t("ok"), closeTwist, true);
+  if (time - o.at < 0.3) buttons = [];                                  // the tap that opened it can't also close it
+}
+
 /* ==================================================================
    POP-UP CARDS: win, lose, pause, settings
 =================================================================== */
@@ -827,6 +1039,7 @@ function drawOverlay() {
   if (o.kind === "chest") return drawChestCard();
   if (o.kind === "gift") return drawGiftCard();
   if (o.kind === "calendar") return drawCalendar();
+  if (o.kind === "twist") return drawTwistCard();
   buttons = buttons.filter(b => false);                                 // nothing behind the card can be tapped
   const a = Math.min(1, o.t * 4), win = o.kind === "win";
   ctx.fillStyle = `rgba(20, 26, 80, ${0.5 * a})`; ctx.fillRect(0, 0, W, H);
@@ -839,8 +1052,8 @@ function drawOverlay() {
     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
     ctx.fillStyle = c.color; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h); ctx.restore();
   }
-  const cw = Math.min(320, W - 40), ch = 372;
-  const x = (W - cw) / 2, y = (H - ch) / 2 + 20 + (1 - a) * 40;
+  const cw = Math.min(320, W - 40), ch = o.relax && !win ? 376 : 372;
+  const x = (W - cw) / 2, y = Math.max(topY + 50, (H - ch) / 2 + 20) + (1 - a) * 40;
   ctx.globalAlpha = a;
 
   // the level's cats sit on top of the card: awake after a win
@@ -871,7 +1084,9 @@ function drawOverlay() {
     const news = [];                                                  // the biggest news first; two at most
     if (o.unlocked) news.push(t("new_cat", CATS[o.unlocked].name));
     if (o.room) news.push(t("new_room", t("room_" + o.room)));
+    if (o.roll) news.push(t("on_roll"));                              // three or more perfect levels in a row
     if (o.golden) news.push(t("golden"));
+    if (o.ribbon) news.push(t("ribbon_won"));
     if (o.note >= 0) news.push(t("note_new"));
     if (o.gift) news.push(t("gift", t("pu_" + o.gift)));
     if (!news.length && o.daily) news.push(t("streak_days", dailyStreak()));
@@ -893,6 +1108,8 @@ function drawOverlay() {
     pillButton(x + 28, y + 130, bw, 50, t("use_snooze"), useSnooze, have, { dim: !have, text: 0.34 });
     pillButton(x + 28, y + 198, bw, 50, t("retry"), () => startLevel(levelIndex, isDaily), !have);
     pillButton(x + 28, y + 266, bw, 44, t("home"), goHome, false);
+    // the first time time runs out: one tap turns the clock off (Settings, Timer) and tries again
+    if (o.relax) pillButton(x + 28, y + 318, bw, 44, t("relax_q"), () => { S.timer = false; save(); startLevel(levelIndex, isDaily); }, false, { fill: "#FFF4CC" });
   }
   ctx.globalAlpha = 1;
 }
