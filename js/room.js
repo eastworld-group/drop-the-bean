@@ -671,7 +671,8 @@ function bedroomPerches() {
 }
 ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase, perches: bedroomPerches });
 let roomCats = [], roomSig = "", roomFx = [];
-function roomCatKeys() { return [S.hero].concat(HEROES.filter(k => k !== S.hero && catOpen(k))); }
+// Only her own cat lives in the room: one cat, the one she chose, is the cutest touch.
+function roomCatKeys() { return [S.hero]; }
 // Called every frame on the room screen: if her cats or her room changed, everyone finds a place again.
 function syncRoom() {
   const R = curRoom(), keys = roomCatKeys(), sig = R.id + "|" + keys.join("") + "|" + R.spots.map(s => S.room.put[s] || "").join(",");

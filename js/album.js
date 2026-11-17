@@ -98,13 +98,14 @@ function drawNote() {
   ctx.fillStyle = `rgba(20, 26, 80, ${0.5 * a})`; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = a;
   const cw = Math.max(220, Math.min(320, W - 40)), lines = wrapLines(noteText(o.n), cw - 48, 18, 700);
-  const ch = 150 + lines.length * 26 + 70;
+  const ch = 150 + lines.length * 26 + 96;
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
   ctx.fillStyle = "#FF5C8A"; drawHeart(W / 2, y + 40, 34);
   fitLabel(t("note_title"), W / 2, y + 76, 21, cw - 30, INK, 900);
   fitLabel(t("note_from", o.n + 1, chapterName(o.n)), W / 2, y + 100, 12, cw - 30, SOFT, 800);
   lines.forEach((ln, i) => label(ln, W / 2, y + 140 + i * 26, 18, INK, 700));
+  fitLabel(t("note_where"), W / 2, y + ch - 82, 11, cw - 30, SOFT, 700);
   pillButton(x + 28, y + ch - 64, cw - 56, 46, t("done"), closeNote, true);
   ctx.globalAlpha = 1;
   if (time - o.at < 0.3) buttons = [];
@@ -205,8 +206,8 @@ function drawAlbum() {
   roundButton(16, topY + 6, 44, "back", () => go("mycat"));
   starPill(W - 16 - 86, topY + 11);
   fitLabel(t("album"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
-  const tabs = ["pics", "stickers", "stats"], tw = Math.max(64, Math.min(110, (W - 32 - 16) / 3));
-  tabs.forEach((id, i) => pillButton(W / 2 + (i - 1) * (tw + 8) - tw / 2, topY + 56, tw, 30, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
+  const tabs = ["pics", "notes", "stickers", "stats"], tw = Math.max(60, Math.min(96, (W - 32 - 24) / 4));
+  tabs.forEach((id, i) => pillButton(W / 2 + (i - 1.5) * (tw + 8) - tw / 2, topY + 56, tw, 30, t("tab_" + id), () => { if (albumTab !== id) { albumTab = id; albumPage = 0; } },
     albumTab === id, { fill: "#FFFFFF", text: 0.44 }));
   const top = topY + 100, bottom = H - s.b - 16;
   if (albumTab === "pics") {
@@ -217,6 +218,21 @@ function drawAlbum() {
       drawChapterCard(n, x, y, cw, h, done);
       fitLabel(t("chapter_n", n + 1), x + cw / 2, y + h + 10, 11, cw, done ? INK : SOFT, 800);
       buttons.push({ x, y, w: cw, h: chh, onTap: () => { if (done) openNote(n); else { toast(t("pic_locked", n + 1)); sfx.no(); } } });
+    });
+  } else if (albumTab === "notes") {
+    // every love note she has unlocked, newest chapter last; tap one to read it in full
+    const count = Math.min(MAX_CHAPTERS, Math.ceil(LEVELS.length / CHAPTER_SIZE));
+    const open = []; for (let n = 0; n < count; n++) if (S.stars[n * CHAPTER_SIZE + CHAPTER_SIZE - 1]) open.push(n);
+    fitLabel(open.length ? t("notes_count", open.length, count) : t("notes_none"), W / 2, top + 8, 13, W - 40, SOFT, 800);
+    const rw = Math.max(220, Math.min(360, W - 32)), rx = (W - rw) / 2, rh = 64;
+    albumGrid(open.length, 1, rw, rh, 8, top + 26, bottom, (i, x, y) => {
+      const n = open[i], unread = !S.notes.includes(n);
+      rr(x, y + 3, rw, rh, 16); ctx.fillStyle = "#8FB4E3"; ctx.fill();
+      rr(x, y, rw, rh, 16); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+      ctx.fillStyle = unread ? "#FF5C8A" : "#F7B6C8"; drawHeart(x + 26, y + rh / 2 + 2, 22);
+      leftLabel(t("note_from", n + 1, chapterName(n)), x + 48, y + 20, 12, rw - 64, SOFT);
+      leftLabel(wrapLines(noteText(n), rw - 64, 15, 700)[0] + (wrapLines(noteText(n), rw - 64, 15, 700).length > 1 ? "..." : ""), x + 48, y + 43, 15, rw - 64, INK);
+      buttons.push({ x, y, w: rw, h: rh, onTap: () => openNote(n) });
     });
   } else if (albumTab === "stickers") {
     const colsN = W >= 400 ? 5 : 4, gap = 8, cw = Math.max(60, Math.min(84, (W - 24 - gap * (colsN - 1)) / colsN)), chh = cw * 0.72 + 22;

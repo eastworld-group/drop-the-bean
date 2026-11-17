@@ -25,6 +25,7 @@ let memo = null;                    // the last whole solution found, and how fa
 let combo = 0, lastTuckT = -9;      // cats tucked in one after another, and when the last one was
 
 function go(where) {
+  if (where === "home" && screen !== "home" && typeof maybeRemindSave === "function") setTimeout(maybeRemindSave, 600);
   save();                                             // keeps the time played and anything else that changed
   screen = where;
   fade = S.calm ? 0 : 1;

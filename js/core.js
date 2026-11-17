@@ -25,6 +25,7 @@ const nameInput = document.getElementById("nameInput");
 const playerInput = document.getElementById("playerInput");
 const codeBox = document.getElementById("codeBox");
 const restoreBox = document.getElementById("restoreBox");
+const fileInput = document.getElementById("fileInput");
 let W = 0, H = 0, time = 0;
 
 const probe = document.createElement("div");
@@ -288,7 +289,9 @@ function freshSave() {
     // notes: chapters whose love note she has read. chests: chapters whose treasure she opened.
     // gift: the daily cat gift (the day it was last opened, how far into the week, whole weeks done).
     // stats: cats tucked in, seconds played, longest daily streak, gifts opened.
-    notes: [], chests: [], gift: { last: "", day: 0, weeks: 0 }, stats: { cats: 0, time: 0, best: 0, gifts: 0 } };
+    notes: [], chests: [], gift: { last: "", day: 0, weeks: 0 }, stats: { cats: 0, time: 0, best: 0, gifts: 0 },
+    // saving: when she last saved a backup (ms), how many levels she had then, the day she was last reminded
+    saved: { at: 0, levels: 0, reminded: "" } };
 }
 // Only the three meows that are kept. A save or code that chose one of the old ones gets Mrow.
 const fixMeow = v => (Number.isInteger(v) && v >= 0 && v < MEOW_COUNT ? v : 0);
@@ -309,6 +312,7 @@ function loadSave() {
       base.daily = Object.assign(freshSave().daily, got.daily || {});
       base.gift = Object.assign(freshSave().gift, got.gift || {});
       base.stats = Object.assign(freshSave().stats, got.stats || {});
+      base.saved = Object.assign(freshSave().saved, got.saved || {});
     }
   } catch (e) { /* private mode or damaged data: start fresh */ }
   base.meow = fixMeow(base.meow);
@@ -317,6 +321,7 @@ function loadSave() {
   base.stats.best = Math.max(base.stats.best, base.daily.streak || 0);    // saves from before stats: the streak she has now
   base.gift = { last: String(base.gift.last || ""), day: Math.max(0, Math.min(7, Math.floor(Number(base.gift.day) || 0))), weeks: Math.max(0, Math.floor(Number(base.gift.weeks) || 0)) };
   base.roomView = [0, 1, 2].includes(base.roomView) ? base.roomView : 0;
+  base.saved = { at: Math.max(0, Number(base.saved.at) || 0), levels: Math.max(0, Math.floor(Number(base.saved.levels) || 0)), reminded: String(base.saved.reminded || "") };
   delete base.theme;                                  // boards used to be chosen by hand: now each chapter has its own look
   for (const k of ["cats", "hats", "necks"]) if (!Array.isArray(base[k])) base[k] = [];
   for (const k of ["stars", "perfect"]) if (!base[k] || typeof base[k] !== "object") base[k] = {};
@@ -541,7 +546,7 @@ const WORDS = {
     hat_bow: "Bow", hat_cap: "Nightcap", hat_flower: "Flower", hat_party: "Party hat", hat_crown: "Crown",
     hat_beanie: "Beanie", hat_tophat: "Top hat", hat_wizard: "Wizard hat",
     neck_collar: "Bell collar", neck_bowtie: "Bow tie", neck_scarf: "Scarf",
-    backup: "Name and backup", your_name: "Your name", your_code: "Your backup code", copy: "Copy code",
+    backup: "Name and saving", your_name: "Your name", your_code: "Your backup code", copy: "Copy code",
     copied: "Copied! Send it to yourself to keep it safe.", code_note: "It holds your stars, coins, cats, outfits and room.",
     code_note2: "Copy a fresh one now and then.", have_code: "New phone? Paste your code here", restore: "Restore",
     restore_sure: "Tap Restore again to replace this phone's progress", bad_code: "That code doesn't look right",
@@ -575,7 +580,14 @@ const WORDS = {
     room: "My room", room_tip: "Tap a spot to decorate", room_none: "Nothing here", in_room: "In your room",
     chapters: "Chapters", chapter_n: "Chapter {0}", where: "Where I am", you_here: "You are here",
     golden: "Golden bed: double coins!", new_room: "New room: the {0}!", note_new: "A note for you",
-    note_title: "A note for you", note_from: "Chapter {0}: {1}",
+    note_title: "A note for you", note_from: "Chapter {0}: {1}", note_where: "Read it again any time: My cat, then Album, then Notes.",
+    tab_notes: "Notes", notes_none: "Finish a chapter to unlock your first note.", notes_count: "{0} of {1} notes unlocked",
+    save_now: "Save my progress", save_file_note: "Saves a small file. Keep it in Files, Notes or a chat with yourself.",
+    load_file: "Load a saved file", or_code: "Or use a code", last_saved: "Last saved: {0}", never_saved: "Not saved yet",
+    saved_ok: "Saved! Keep that file somewhere safe.", saved_copy: "Saved as a code. Paste it somewhere safe.",
+    load_sure: "This file has {0} stars. Replace this phone's progress with it?", load_yes: "Yes, load it", load_no: "Not now",
+    bad_file: "That file doesn't have a save in it", save_remind: "It has been a while. Save your progress in Settings.",
+    today: "today", yesterday: "yesterday", days_ago: "{0} days ago",
     album: "Album", tab_pics: "Pictures", tab_stickers: "Stickers", tab_stats: "My stats",
     page_of: "{0} of {1}", pic_locked: "Finish chapter {0} to paint this one",
     chest_title: "Treasure!", chest_got: "For your cat: {0}", chest_tip: "3 stars on every level of a chapter opens its chest",
@@ -685,7 +697,7 @@ function meow(delay, pitch) {
    pitched up one step for each cat tucked in a row, which stays sweet where the bright
    first pick would get shrill. */
 const SFX_FILES = {
-  pickup: ["sounds/sfx-pickup.wav", 0.8], drop: ["sounds/sfx-drop.wav", 0.6], bump: ["sounds/sfx-bump.wav", 0.55],
+  pickup: ["sounds/sfx-pickup.wav", 0.28], drop: ["sounds/sfx-drop.wav", 0.28], bump: ["sounds/sfx-bump.wav", 0.35],   // sliding sounds kept soft: she asked for quieter
   crack: ["sounds/sfx-crack.wav", 0.7], tuck: ["sounds/sfx-tuck.wav", 0.7], tuck2: ["sounds/sfx-tuck-2.wav", 0.7],
   star: ["sounds/sfx-star.wav", 0.35], win: ["sounds/sfx-win.wav", 0.6], coin: ["sounds/sfx-coin.wav", 0.35],
   tap: ["sounds/sfx-tap.wav", 0.35], purr: ["sounds/sfx-purr.wav", 0.55],
@@ -716,7 +728,7 @@ function playRec(name, o) {
 
 let lastBump = 0;
 const sfx = {
-  slide:  () => tone(320, 0.04, { type: "triangle", vol: 0.05 }),
+  slide:  () => tone(320, 0.035, { type: "triangle", vol: 0.018 }),
   // a cat hops into bed. n = how many came right before it (1, 2, 3 ...): each one a step higher
   tuck:   n => {
     if (n > 0) { if (!playRec("tuck2", { rate: Math.pow(2, Math.min(n, 8) / 12) })) { sfx.tuckTone(); sfx.combo(n); } return; }
@@ -744,7 +756,7 @@ const sfx = {
   // picking a bed up and putting it down
   pick:   () => playRec("pickup") || tone(560, 0.07, { to: 760, vol: 0.05, type: "triangle" }),
   drop:   () => playRec("drop") || sfx.dropTone(),
-  dropTone: () => { tone(170, 0.09, { to: 110, vol: 0.09 }); tone(340, 0.04, { vol: 0.025, type: "triangle", delay: 0.01 }); },
+  dropTone: () => { tone(170, 0.09, { to: 110, vol: 0.04 }); tone(340, 0.04, { vol: 0.012, type: "triangle", delay: 0.01 }); },
   // cats tucked in one after another: each one a step higher (n = 1, 2, 3 ...)
   combo:  n => { const f = 660 * Math.pow(2, Math.min(n, 9) * 2 / 12); tone(f, 0.12, { vol: 0.06, type: "triangle", delay: 0.06 }); tone(f * 2, 0.08, { vol: 0.02, delay: 0.08 }); },
   // a star lands on the win card (i = 0, 1, 2)

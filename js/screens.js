@@ -268,56 +268,138 @@ function drawMyCat() {
 }
 
 /* ==================================================================
-   NAME AND BACKUP: your name, and a code that carries your progress
-   to another phone. The three text boxes are real ones placed over
-   the canvas (see main.js), so the phone keyboard and paste work.
+   NAME AND SAVING: her name, and her progress saved as a small file.
+   "Save my progress" opens the phone's share sheet with a file, so she
+   can keep it in Files or Notes or send it to herself. "Load a saved file"
+   reads one back. The old code still works for anyone who prefers it.
+   The text boxes are real ones placed over the canvas (see main.js).
 =================================================================== */
-let playerBox = null, codeBoxAt = null, restoreBoxAt = null, restoreArmed = 0;
+let playerBox = null, codeBoxAt = null, restoreBoxAt = null, restoreArmed = 0, showCode = false;
 function openBackup() {
   go("backup");
   playerInput.value = S.player || "";
   codeBox.value = makeCode();
   restoreBox.value = "";
-  restoreArmed = 0;
+  restoreArmed = 0; showCode = false;
 }
+// "today", "yesterday", "3 days ago"
+function agoText(ms) {
+  const days = Math.floor((new Date(todayKey()) - new Date(todayKey(new Date(ms)))) / 86400000);
+  return days <= 0 ? t("today") : days === 1 ? t("yesterday") : t("days_ago", days);
+}
+function markSaved() { S.saved.at = Date.now(); S.saved.levels = Object.keys(S.stars).length; save(); }
+
+// Save: a small text file holding the backup code. On an iPhone the share sheet
+// offers "Save to Files", Notes, Telegram and so on. Elsewhere the file downloads.
+function saveToFile() {
+  const code = makeCode(), day = todayKey();
+  const text = "Drop the Bean save, " + day + (S.player ? ", " + S.player : "") + "\n\n" + code + "\n\nTo load it: Settings, then Name and saving, then Load a saved file.\n";
+  const name = "drop-the-bean-save-" + day + ".txt";
+  const done = () => { markSaved(); toast(t("saved_ok")); sfx.coin(); };
+  let file = null;
+  try { file = new File([text], name, { type: "text/plain" }); } catch (e) { file = null; }
+  if (file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: "Drop the Bean save" }).then(done, err => {
+      if (err && err.name === "AbortError") return;          // she closed the share sheet: nothing saved, no fuss
+      downloadFile(text, name, done);
+    });
+    return;
+  }
+  downloadFile(text, name, done);
+}
+function downloadFile(text, name, done) {
+  try {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    done();
+  } catch (e) {                                              // last resort: copy the code itself
+    copyCode(); markSaved();
+  }
+}
+// Load: she picks the saved file; if it holds a good save, a card asks before replacing anything.
+function loadFromFile() { fileInput.value = ""; fileInput.click(); }
+function gotFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const got = readCode(String(reader.result || ""));
+    if (!got) { toast(t("bad_file")); sfx.no(); return; }
+    overlay = { kind: "loadsave", t: 0, delay: 0, at: time, got };
+  };
+  reader.onerror = () => { toast(t("bad_file")); sfx.no(); };
+  reader.readAsText(file);
+}
+function useSave(got) {
+  S = got; markSaved();                                      // a save she just loaded is, by definition, saved
+  nameInput.value = S.names[S.hero] || ""; nameInput.placeholder = CATS[S.hero].name;
+  page = -1; restoreArmed = 0; overlay = null;
+  go("home");
+  toast(t("restored")); sfx.magic();
+}
+function drawLoadCard() {
+  const o = overlay;
+  buttons = [];
+  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
+  const cw = Math.max(220, Math.min(320, W - 40)), lines = wrapLines(t("load_sure", starSum(o.got)), cw - 48, 17, 700);
+  const ch = 96 + lines.length * 24 + 120, x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
+  card(x, y, cw, ch);
+  drawCat(W / 2, y + 44, 56, o.got.hero, { wake: 1, still: true, noShadow: true, hat: o.got.hat, neck: o.got.neck });
+  lines.forEach((ln, i) => label(ln, W / 2, y + 96 + i * 24, 17, INK, 700));
+  const by = y + 96 + lines.length * 24 + 8;
+  pillButton(x + 28, by, cw - 56, 46, t("load_yes"), () => useSave(o.got), true);
+  pillButton(x + 28, by + 56, cw - 56, 40, t("load_no"), () => { overlay = null; }, false);
+  if (time - o.at < 0.3) buttons = [];                       // no accidental double tap
+}
+
 function copyCode() {
   const code = makeCode();
   codeBox.value = code;
-  const done = () => toast(t("copied"));
+  const done = () => { markSaved(); toast(t("saved_copy")); };
   const oldWay = () => { codeBox.focus(); codeBox.select(); try { document.execCommand("copy"); } catch (e) { /* she can still long-press to copy */ } codeBox.blur(); done(); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, oldWay); else oldWay();
 }
 function restoreFromCode() {
   const got = readCode(restoreBox.value);
   if (!got) { toast(t("bad_code")); sfx.no(); restoreArmed = 0; return; }
-  if (time - restoreArmed > 5 || !restoreArmed) { restoreArmed = time; toast(t("restore_sure")); return; }   // ask twice: this replaces what is here
-  S = got; save();
-  nameInput.value = S.names[S.hero] || ""; nameInput.placeholder = CATS[S.hero].name;
-  page = -1; restoreArmed = 0;
-  go("home");
-  toast(t("restored")); sfx.magic();
+  overlay = { kind: "loadsave", t: 0, delay: 0, at: time, got };
 }
 
 function drawBackup() {
+  const s = safeArea();
   roundButton(16, topY + 6, 44, "back", () => go("home"));
-  label(t("backup"), W / 2, topY + 28, 24, INK, 900);
+  fitLabel(t("backup"), W / 2, topY + 28, 24, W - 2 * 76, INK, 900);
   const bw = Math.min(320, W - 40), x = (W - bw) / 2;
   let y = topY + 74;
   label(t("your_name"), W / 2, y, 14, INK, 800);
   playerBox = { x, y: y + 12, w: bw, h: 42 };
-  y += 82;
-  label(t("your_code"), W / 2, y, 14, INK, 800);
-  codeBoxAt = { x, y: y + 12, w: bw, h: 70 };
-  y += 92;
-  pillButton(x, y, bw, 44, t("copy"), copyCode, true);
+  y += 80;
+  // the two big buttons: save, load
+  pillButton(x, y, bw, 52, t("save_now"), saveToFile, true);
   y += 66;
-  fitLabel(t("code_note"), W / 2, y, 12, bw, INK, 700);
-  fitLabel(t("code_note2"), W / 2, y + 16, 12, bw, INK, 700);
-  y += 46;
-  label(t("have_code"), W / 2, y, 14, INK, 800);
-  restoreBoxAt = { x, y: y + 12, w: bw, h: 70 };
-  y += 92;
-  pillButton(x, y, bw, 44, t("restore"), restoreFromCode, false, { fill: "#FFFFFF" });
+  fitLabel(S.saved.at ? t("last_saved", agoText(S.saved.at)) : t("never_saved"), W / 2, y, 14, bw, S.saved.at ? INK : "#B8234F", 800);
+  fitLabel(t("save_file_note"), W / 2, y + 20, 12, bw, SOFT, 700);
+  y += 44;
+  pillButton(x, y, bw, 46, t("load_file"), loadFromFile, false, { fill: "#FFFFFF" });
+  y += 64;
+  // the old way, for anyone who prefers a code: hidden until asked for
+  if (!showCode) {
+    pillButton(x + bw * 0.2, y, bw * 0.6, 36, t("or_code"), () => { showCode = true; codeBox.value = makeCode(); }, false, { fill: "#E6EEFF", text: 0.42 });
+    codeBoxAt = null; restoreBoxAt = null;
+    return;
+  }
+  const room = H - s.b - y;
+  const boxH = room > 300 ? 64 : 48;
+  label(t("your_code"), W / 2, y, 13, INK, 800);
+  codeBoxAt = { x, y: y + 10, w: bw, h: boxH };
+  y += boxH + 18;
+  pillButton(x, y, bw, 38, t("copy"), copyCode, false, { fill: "#FFFFFF", text: 0.42 });
+  y += 54;
+  label(t("have_code"), W / 2, y, 13, INK, 800);
+  restoreBoxAt = { x, y: y + 10, w: bw, h: boxH };
+  y += boxH + 18;
+  pillButton(x, y, bw, 38, t("restore"), restoreFromCode, false, { fill: "#FFFFFF", text: 0.42 });
 }
 
 /* ==================================================================
@@ -741,6 +823,7 @@ function drawOverlay() {
   if (o.kind === "pause") return drawPause();
   if (o.kind === "buy") return drawBuy();
   if (o.kind === "note") return drawNote();
+  if (o.kind === "loadsave") return drawLoadCard();
   if (o.kind === "chest") return drawChestCard();
   if (o.kind === "gift") return drawGiftCard();
   if (o.kind === "calendar") return drawCalendar();

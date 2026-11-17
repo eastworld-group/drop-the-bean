@@ -196,6 +196,20 @@ screen = S.setup ? "home" : "mycat";      // first visit: pick and name your cat
 layout();
 requestAnimationFrame(frame);
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });   // keeps the time played
+fileInput.addEventListener("change", () => gotFile(fileInput.files && fileInput.files[0]));
+
+// Ask the phone to keep this game's saved data even when space runs low.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { /* fine either way */ });
+
+// A gentle nudge, at most once a day on the home screen, when she has played a fair
+// amount since her last save (25 levels or more, or a week with any new levels).
+function maybeRemindSave() {
+  const done = Object.keys(S.stars).length, since = done - (S.saved.levels || 0);
+  if (!S.setup || S.saved.reminded === todayKey() || since < 1) return;
+  const week = !S.saved.at || Date.now() - S.saved.at > 7 * 86400000;
+  if (since >= 25 || (week && since >= 5)) { S.saved.reminded = todayKey(); save(); toast(t("save_remind")); }
+}
+setTimeout(maybeRemindSave, 1500);
 
 // On a real https address, keep a copy on the phone so it opens with no internet.
 if ("serviceWorker" in navigator && location.protocol === "https:") {
