@@ -12,6 +12,8 @@ const levels = window.LEVELS, solutions = require("./solutions.json");
 const CHAPTERS = chaptersOnDisk(), PER_CHAPTER = 25, TOTAL = CHAPTERS * PER_CHAPTER;
 const FIRST_CREAKY = 21;                                                 // creaky boards ("c") start in this chapter
 const FIRST_ONEWAY = 29;                                                 // one-way tiles ("^v<>") start in this chapter
+const FIRST_YARN = 37;                                                   // yarn balls ("y") start in this chapter
+const FIRST_FAMILY = 33;                                                 // family beds (6 cells) start in this chapter
 const ARROWS = "^v<>";
 let bad = 0;
 const fail = (i, why) => { bad++; console.log(`level ${i + 1}: ${why}`); };
@@ -46,6 +48,10 @@ if (CHAPTERS >= FIRST_ONEWAY) {
   const intro = levels[(FIRST_ONEWAY - 1) * PER_CHAPTER];
   if (intro && (intro.hint !== "h_oneway" || !/[\^v<>]/.test(intro.map.join("")))) problem(`the first level of chapter ${FIRST_ONEWAY} must teach one-way tiles (hint "h_oneway" and an arrow on the map)`);
 }
+if (CHAPTERS >= FIRST_YARN) {
+  const intro = levels[(FIRST_YARN - 1) * PER_CHAPTER];
+  if (intro && (intro.hint !== "h_yarn" || !intro.map.join("").includes("y"))) problem(`the first level of chapter ${FIRST_YARN} must teach yarn balls (hint "h_yarn" and a ball on the map)`);
+}
 // creaky boards and one-way tiles are never in every level of a chapter
 for (let n = 1; n <= CHAPTERS; n++) {
   const ls = levels.slice((n - 1) * PER_CHAPTER, n * PER_CHAPTER);
@@ -63,9 +69,18 @@ levels.forEach((lv, i) => {
   if (!lv.beds.some(b => b.color === "k")) fail(i, "the player's cat is missing");
   const cats = {};
   for (const ch of lv.map.join("")) {
-    if (!(".#c" + ARROWS + "kgobwpm").includes(ch)) fail(i, `the map has a "${ch}" in it, which is nothing the game knows`);
-    if (!(".#c" + ARROWS).includes(ch)) cats[ch] = (cats[ch] || 0) + 1;
+    if (!(".#cy" + ARROWS + "kgobwpm").includes(ch)) fail(i, `the map has a "${ch}" in it, which is nothing the game knows`);
+    if (!(".#cy" + ARROWS).includes(ch)) cats[ch] = (cats[ch] || 0) + 1;
   }
+  // yarn balls ("y"): on plain floor, no bed starts on one, none before the chapter that teaches them
+  if (lv.map.join("").includes("y")) {
+    if (i < (FIRST_YARN - 1) * PER_CHAPTER) fail(i, `a yarn ball before chapter ${FIRST_YARN}`);
+    for (const b of lv.beds) for (const [dr, dc] of b.cells) if (lv.map[b.r + dr][b.c + dc] === "y") fail(i, `bed ${b.color} starts on a yarn ball`);
+  }
+  // family beds (6 cells): from chapter 33, only on 7x6 or 8x6 boards, at most one per level
+  const family = lv.beds.filter(b => b.cells.length === 6).length;
+  if (family && (i < (FIRST_FAMILY - 1) * PER_CHAPTER || lv.rows < 7 || family > 1)) fail(i, "a family bed where none may be (only from chapter 33, on 7x6 or 8x6, one per level)");
+  if (lv.beds.some(b => b.cells.length === 5 || b.cells.length > 6)) fail(i, "a bed of a size the game does not have");
   // one-way tiles ("^v<>"): empty floor, no bed starts on one, and none before the chapter that teaches them
   if (/[\^v<>]/.test(lv.map.join(""))) {
     if (i < (FIRST_ONEWAY - 1) * PER_CHAPTER) fail(i, `a one-way tile before chapter ${FIRST_ONEWAY}`);
@@ -100,6 +115,7 @@ levels.forEach((lv, i) => {
   }
   if (!s.pos.every(p => p < 0)) fail(i, "stored solution does not finish the level");
 });
-const creaky = levels.filter(lv => lv.map.join("").includes("c")).length, oneway = levels.filter(lv => /[\^v<>]/.test(lv.map.join(""))).length;
-console.log(bad ? `${bad} problems` : `all ${levels.length} levels pass (${CHAPTERS} chapters of ${PER_CHAPTER}, every bed needs one cat per cell, ${creaky} levels have creaky boards, ${oneway} have one-way tiles)`);
+const has = re => levels.filter(lv => re.test(lv.map.join(""))).length;
+const families = levels.filter(lv => lv.beds.some(b => b.cells.length === 6)).length;
+console.log(bad ? `${bad} problems` : `all ${levels.length} levels pass (${CHAPTERS} chapters of ${PER_CHAPTER}, every bed needs one cat per cell, ${has(/c/)} levels have creaky boards, ${has(/[\^v<>]/)} one-way tiles, ${has(/y/)} yarn balls, ${families} a family bed)`);
 process.exit(bad ? 1 : 0);

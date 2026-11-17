@@ -87,9 +87,10 @@ cat flaps and turntables are large (they change bed shapes or positions in new w
 
 ## Where we are (2026-11-16)
 
-- Built: seasons 1 to 3, levels 1 to 700, with creaky boards from chapter 21 (level 501) in some levels.
+- Built: levels 1 to 1000 (chapters 1 to 40): creaky boards from level 501, one-way tiles from 701,
+  yarn balls from 901, and a rare 2x3 family bed (6 cats) from level 801.
 - Being built: the bedroom you decorate, game-feel polish, recorded sounds, a chapter list.
-- Next batch: season 4 (chapters 29 to 36): the one-way floor and the Hammer.
+- Next batch: the rest of season 5 (chapters 41 to 44), then season 6 (ice).
 - Level file size: about 380 KB at 700 levels, about 1.1 MB at 2000. Split it into one file
   per chapter before then, so a phone only loads what it needs.
 

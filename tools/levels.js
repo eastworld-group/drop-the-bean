@@ -21,7 +21,12 @@
 //    may only slide in the arrow's direction while any part of it is on such a
 //    tile, before or after the slide. So it can only enter, ride along and
 //    leave in that direction, and can not come back the same way. They never break.
-//  - Creaky boards and one-way tiles are the two things that can ruin a level.
+//  - Yarn balls ("y" in the map) sit on plain floor. When a bed slides onto a
+//    ball's cell, the ball rolls one cell on, the same way. It may only roll onto
+//    plain floor ("."): no cat, no bed, no other ball, no wall, hole, creaky
+//    board or one-way tile, and not off the board. If a ball can't roll, the
+//    bed can't slide. Balls never go away, and a ball in a corner stays stuck.
+//  - Creaky boards, one-way tiles and yarn balls are the things that can ruin a level.
 //
 // Levels are not just "solvable". Each candidate is played by a pretend player
 // who never plans (always walks a bed to the nearest cat). Every time that
@@ -33,6 +38,7 @@
 // Run:  node tools/levels.js 1        (makes chapter 1. Any chapter number works:
 //                                      chapter 9 and up come from a formula, see "seasons")
 //       node tools/levels.js topup 5  (fills chapter 5 up to 25 if it came out short)
+//       node tools/levels.js swap 29  (swaps the levels SWAPS lists in that chapter file)
 //       node tools/levels.js merge    (joins all chapter files there are, 1, 2, 3 ... until
 //                                      one is missing, into levels-data.js)
 //       node tools/check.js           (replays every stored solution and checks the rules)
@@ -54,10 +60,12 @@ const SHAPES = {
   l4c: [[0, 0], [0, 1], [1, 1], [2, 1]], l4d: [[0, 2], [1, 0], [1, 1], [1, 2]],
   t4a: [[0, 0], [0, 1], [0, 2], [1, 1]], t4b: [[0, 1], [1, 0], [1, 1], [2, 1]],
   t4c: [[0, 1], [1, 0], [1, 1], [1, 2]], t4d: [[0, 0], [1, 0], [1, 1], [2, 0]],
+  // the family bed: 6 cells, so 6 cats. Only from chapter 33, at most one per level.
+  f6h: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]], f6v: [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]],
 };
 // the shapes sorted by how many cells they have: BY_SIZE[3] = all the 3-cell shapes
 const BY_SIZE = [[], [], [], [], []];
-for (const cells of Object.values(SHAPES)) BY_SIZE[cells.length].push(cells);
+for (const cells of Object.values(SHAPES)) (BY_SIZE[cells.length] || (BY_SIZE[cells.length] = [])).push(cells);
 const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 // one-way tiles, in the same order as DIRS: up, down, left, right
 const ARROWS = "^v<>", FLOOR = ".c" + ARROWS;
@@ -74,6 +82,7 @@ function prepare(level) {
   return {
     rows, cols, N: rows * cols, colors, gate,
     creaky: level.map.join("").includes("c"),
+    yarn: level.map.join("").includes("y"),
     arrows: /[\^v<>]/.test(level.map.join("")),
     shapes: level.beds.map(b => b.cells),
     axis: level.beds.map(b => b.axis || ""),
@@ -102,7 +111,7 @@ function slide(P, s, occ, i, dr, dc) {
   if (P.axis[i] === "h" && dr !== 0) return null;
   if (P.axis[i] === "v" && dc !== 0) return null;
   const br = ((s.pos[i] / P.cols) | 0) + dr, bc = (s.pos[i] % P.cols) + dc;
-  let eat = null;
+  let eat = null, roll = null;
   for (const [sr, sc] of P.shapes[i]) {
     const r = br + sr, c = bc + sc;
     if (r < 0 || c < 0 || r >= P.rows || c >= P.cols) return null;
@@ -118,17 +127,33 @@ function slide(P, s, occ, i, dr, dc) {
     if (P.gate[idx] >= 0 && s.pos[P.gate[idx]] >= 0) return null;       // gate still closed
     const ch = s.cats[idx];
     if (ch === "#") return null;
+    if (ch === "y") { (roll || (roll = [])).push(idx); continue; }        // a yarn ball: it has to roll on
     if (!FLOOR.includes(ch)) {
       if (ch !== P.colors[i]) return null;
       (eat || (eat = [])).push(idx);
     }
   }
   if (eat && eat.length > s.need[i]) return null;
+  let rolled = null;
+  if (roll) {
+    // every ball rolls one cell on, onto plain floor that nothing else is on
+    const mine = new Set(P.shapes[i].map(([sr, sc]) => (br + sr) * P.cols + bc + sc));
+    for (const idx of roll) {
+      const r = ((idx / P.cols) | 0) + dr, c = (idx % P.cols) + dc, to = r * P.cols + c;
+      if (r < 0 || c < 0 || r >= P.rows || c >= P.cols) return null;
+      if (s.cats[to] !== "." || occ[to] !== -1 || mine.has(to)) return null;
+      (rolled || (rolled = [])).push([idx, to]);
+    }
+  }
   const pos = s.pos.slice();
   pos[i] = br * P.cols + bc;
   let cats = s.cats, need = s.need, gone = false, a = null;
-  if (eat) {
+  if (rolled) {
     a = cats.split("");
+    for (const [from, to] of rolled) { a[from] = "."; a[to] = "y"; }
+  }
+  if (eat) {
+    a = a || cats.split("");
     for (const e of eat) a[e] = ".";
     need = need.slice();
     need[i] -= eat.length;
@@ -226,7 +251,9 @@ function thinking(level) {
    cat n is still on the floor. A bed is gone when all its cats are tucked in,
    so the fast engine needs every bed to have exactly as many cats as it needs.
    The creaky boards sit in the same number, above the cats: their bit is on
-   while the board is whole. C.cats and C.creak say which bits are which. */
+   while the board is whole. C.cats and C.creak say which bits are which.
+   Yarn balls move, so they are kept in a second number ("balls", see
+   packBalls). Every search keeps it next to the mask for each position. */
 const STEPS = 4, NEVER = 9999;
 function compile(level) {
   const { rows, cols } = level, N = rows * cols, nb = level.beds.length;
@@ -240,7 +267,20 @@ function compile(level) {
     own.push(m); count.push(catBed.length - shift[b]);
     if (count[b] !== level.beds[b].need || count[b] < 1) return null;
   }
-  for (let i = 0; i < N; i++) if (flat[i] !== "#" && !FLOOR.includes(flat[i]) && catAt[i] < 0) return null;   // a cat with no bed
+  for (let i = 0; i < N; i++) if (flat[i] !== "#" && flat[i] !== "y" && !FLOOR.includes(flat[i]) && catAt[i] < 0) return null;   // a cat with no bed
+  // yarn balls: where they start (at most 3, see packBalls), and where a ball may roll to:
+  // plain floor, or a cat's cell once the cat is tucked in
+  const ballCells = [];
+  for (let i = 0; i < N; i++) if (flat[i] === "y") ballCells.push(i);
+  if (ballCells.length > 3) return null;
+  const rollable = new Uint8Array(N), wall = new Uint8Array(N);
+  for (let i = 0; i < N; i++) wall[i] = flat[i] === "#" ? 1 : 0;
+  for (let i = 0; i < N; i++) rollable[i] = flat[i] === "." || flat[i] === "y" || catAt[i] >= 0 ? 1 : 0;
+  // step[cell * 4 + dir]: the next cell that way, or -1 off the board
+  const step = new Int8Array(N * STEPS).fill(-1);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) DIRS.forEach(([dr, dc], d) => {
+    if (r + dr >= 0 && c + dc >= 0 && r + dr < rows && c + dc < cols) step[(r * cols + c) * STEPS + d] = (r + dr) * cols + c + dc;
+  });
   // one-way tiles: which way each one points (-1: not an arrow)
   const arrowAt = new Int8Array(N).fill(-1);
   let nArrows = 0;
@@ -285,7 +325,8 @@ function compile(level) {
   const C = {
     rows, cols, N, nb, catAt, catBed, own, shift, count, gate, cover, under, next, crk, creakAt, nCreak, arw,
     arrows: nArrows,
-    risky: nCreak > 0 || nArrows > 0,                                // a slide can ruin this level
+    nBalls: ballCells.length, ball0: packBalls(ballCells), rollable, step, wall,
+    risky: nCreak > 0 || nArrows > 0 || ballCells.length > 0,        // a slide can ruin this level
     lock: level.beds.map(b => b.lock === undefined ? -1 : b.lock),
     start: level.beds.map(b => b.r * cols + b.c),
     nCats, cats: (1 << nCats) - 1,                                   // the cat bits
@@ -320,15 +361,55 @@ function farTable(C, b) {
   return far;
 }
 
-function fillOcc(C, occ, pos, at, mask) {
+// Yarn balls, packed into one number: the cells, smallest first, 6 bits each.
+const packBalls = cells => cells.slice().sort((a, b) => a - b).reduce((key, c, j) => key + (c + 1) * POW[j], 0);
+const unpackBalls = key => { const out = []; for (; key > 0; key = Math.floor(key / 64)) out.push(key % 64 - 1); return out; };
+// The mask and the balls together, as one number to look a position up by.
+const withBalls = (mask, balls) => mask + balls * 2147483648;
+// The balls of the position being looked at (set by fillOcc or setBalls), and
+// after the last slide moveMask allowed.
+let BALLS_NOW = 0, BALLS_AFTER = 0;
+const BALL_AT = new Uint8Array(64);
+function setBalls(C, balls) {
+  BALLS_NOW = balls;
+  if (!C.nBalls) return;
+  BALL_AT.fill(0, 0, C.N);
+  for (const c of unpackBalls(balls)) BALL_AT[c] = 1;
+}
+function fillOcc(C, occ, pos, at, mask, balls = 0) {
   occ.fill(-1);
   for (let i = 0; i < C.nb; i++) if (C.own[i] & mask) {
     const cells = C.cover[i][pos[at + i]];
     for (let k = 0; k < cells.length; k++) occ[cells[k]] = i;
   }
+  if (C.nBalls) setBalls(C, balls);
+}
+// Bed i slides from p to np: roll the balls on its new cells one cell on.
+// Sets BALLS_AFTER. false if a ball can't roll (then the bed can't slide).
+function rollBalls(C, occ, mask, i, p, np) {
+  BALLS_AFTER = BALLS_NOW;
+  const cells = C.cover[i][np], old = C.cover[i][p], diff = np - p;
+  const d = diff === -C.cols ? 0 : diff === C.cols ? 1 : diff === -1 ? 2 : 3;
+  let moved = null;
+  for (let k = 0; k < cells.length; k++) {
+    const idx = cells[k];
+    if (!BALL_AT[idx] || old.includes(idx)) continue;
+    const to = C.step[idx * STEPS + d];
+    if (to < 0 || !C.rollable[to] || occ[to] >= 0 || BALL_AT[to] || cells.includes(to)) return false;
+    const ci = C.catAt[to];
+    if (ci >= 0 && (mask >>> ci & 1)) return false;                 // a cat is still there
+    (moved || (moved = [])).push(idx, to);
+  }
+  if (moved) {
+    const list = unpackBalls(BALLS_NOW);
+    for (let k = 0; k < moved.length; k += 2) list[list.indexOf(moved[k])] = moved[k + 1];
+    BALLS_AFTER = packBalls(list);
+  }
+  return true;
 }
 // Bed i slides from "p" onto the cells of "np". Returns the mask afterwards
-// (cats left and creaky boards still whole), or -1 if it can't.
+// (cats left and creaky boards still whole), or -1 if it can't. With yarn
+// balls, the balls afterwards are in BALLS_AFTER.
 function moveMask(C, occ, mask, i, p, np) {
   const cells = C.cover[i][np];
   let eat = 0;
@@ -343,6 +424,7 @@ function moveMask(C, occ, mask, i, p, np) {
       eat |= 1 << ci;
     }
   }
+  if (C.nBalls && !rollBalls(C, occ, mask, i, p, np)) return -1;
   if (!C.creak) return mask & ~eat;
   const on = C.crk[i][np];
   if (on & ~mask) return -1;                                       // a broken board is a hole
@@ -356,6 +438,7 @@ const canMove = (C, mask, i) => (C.own[i] & mask) && (C.lock[i] < 0 || !(C.own[C
 const MAXN = 1200000, W = 7, POW = [1, 64, 4096, 262144, 16777216, 1073741824, 68719476736];
 const B_POS = new Int8Array(MAXN * W), B_MASK = new Int32Array(MAXN), B_G = new Int16Array(MAXN), B_H = new Int16Array(MAXN);
 const B_PAR = new Int32Array(MAXN), B_MV = new Int8Array(MAXN), B_DONE = new Uint8Array(MAXN), B_KEY = new Float64Array(MAXN);
+const B_BALL = new Int32Array(MAXN);
 
 /* ---------- the player who never plans ----------
    This player only looks one cat ahead: walk some bed to the nearest cat it
@@ -436,41 +519,46 @@ function plainPlayer(C, cap = 25000) {
   }
   return { slides, asides, dead: false };
 }
-// The same player on a level with creaky boards or one-way tiles. Boards break
-// under way, so "where am I" is the bed positions plus which boards are still whole.
+// The same player on a level with creaky boards, one-way tiles or yarn balls.
+// Boards break and balls roll under way, so "where am I" is the bed positions
+// plus which boards are still whole plus where the balls are.
 function plainCreaky(C, cap) {
   const occ = new Int8Array(C.N), nb = C.nb, pos = C.start.slice();
-  let mask = C.full, slides = 0, asides = 0;
+  let mask = C.full, balls = C.ball0, slides = 0, asides = 0;
+  const soloKey = (np, nm, bl) => C.nBalls ? np + "," + nm + "," + bl : np + nm * 64;
   while (mask & C.cats) {
     // 1. the nearest cat one bed can walk to while the others stay put
-    fillOcc(C, occ, pos, 0, mask);
-    let best = 0, bestBed = -1, bestPos = 0, bestMask = 0;
+    fillOcc(C, occ, pos, 0, mask, balls);
+    let best = 0, bestBed = -1, bestPos = 0, bestMask = 0, bestBalls = 0;
     for (let i = 0; i < nb; i++) {
       if (!canMove(C, mask, i)) continue;
-      const seen = new Set([pos[i] + mask * 64]), qp = [pos[i]], qm = [mask], qd = [0];
+      const seen = new Set([soloKey(pos[i], mask, balls)]), qp = [pos[i]], qm = [mask], qd = [0], qb = [balls];
       let found = false;
       for (let head = 0; head < qp.length && !found; head++) {
         if (bestBed >= 0 && qd[head] + 1 >= best) break;           // can't beat the best so far
+        if (C.nBalls) setBalls(C, qb[head]);
         for (let d = 0; d < STEPS; d++) {
           const np = C.next[i][qp[head] * STEPS + d];
           if (np < 0) continue;
           const nm = moveMask(C, occ, qm[head], i, qp[head], np);
           if (nm < 0) continue;
-          if ((nm & C.cats) !== (mask & C.cats)) { best = qd[head] + 1; bestBed = i; bestPos = np; bestMask = nm; found = true; break; }
-          if (seen.has(np + nm * 64)) continue;
-          seen.add(np + nm * 64); qp.push(np); qm.push(nm); qd.push(qd[head] + 1);
+          const nbl = C.nBalls ? BALLS_AFTER : 0;
+          if ((nm & C.cats) !== (mask & C.cats)) { best = qd[head] + 1; bestBed = i; bestPos = np; bestMask = nm; bestBalls = nbl; found = true; break; }
+          const k = soloKey(np, nm, nbl);
+          if (seen.has(k)) continue;
+          seen.add(k); qp.push(np); qm.push(nm); qd.push(qd[head] + 1); qb.push(nbl);
         }
       }
     }
-    if (bestBed >= 0) { slides += best; pos[bestBed] = bestPos; mask = bestMask; continue; }
+    if (bestBed >= 0) { slides += best; pos[bestBed] = bestPos; mask = bestMask; balls = bestBalls; continue; }
     // 2. nobody can: shortest way to a cat with all beds together
     const seen = new Map();
     let key = 0, n = 1, hit = false;
     for (let i = 0; i < nb; i++) { B_POS[i] = pos[i]; if (C.own[i] & mask) key += (pos[i] + 1) * POW[i]; }
-    B_KEY[0] = key; B_G[0] = 0; B_MASK[0] = mask; seen.set(mask, new Set([key]));
+    B_KEY[0] = key; B_G[0] = 0; B_MASK[0] = mask; B_BALL[0] = balls; seen.set(withBalls(mask, balls), new Set([key]));
     for (let head = 0; head < n && !hit; head++) {
       const hm = B_MASK[head];
-      fillOcc(C, occ, B_POS, head * W, hm);
+      fillOcc(C, occ, B_POS, head * W, hm, B_BALL[head]);
       for (let i = 0; i < nb && !hit; i++) {
         if (!canMove(C, hm, i)) continue;
         const p = B_POS[head * W + i];
@@ -479,18 +567,19 @@ function plainCreaky(C, cap) {
           if (np < 0) continue;
           const nm = moveMask(C, occ, hm, i, p, np);
           if (nm < 0) continue;
+          const nbl = C.nBalls ? BALLS_AFTER : 0;
           if ((nm & C.cats) !== (hm & C.cats)) {                   // a cat! carry on from here
             for (let j = 0; j < nb; j++) pos[j] = B_POS[head * W + j];
-            pos[i] = np; mask = nm; slides += B_G[head] + 1; asides++; hit = true; break;
+            pos[i] = np; mask = nm; balls = nbl; slides += B_G[head] + 1; asides++; hit = true; break;
           }
           const k = B_KEY[head] + (np - p) * POW[i];
-          let m = seen.get(nm);
-          if (!m) seen.set(nm, m = new Set());
+          let m = seen.get(withBalls(nm, nbl));
+          if (!m) seen.set(withBalls(nm, nbl), m = new Set());
           if (m.has(k)) continue;
           if (n >= cap) return null;
           m.add(k);
           for (let j = 0; j < nb; j++) B_POS[n * W + j] = B_POS[head * W + j];
-          B_POS[n * W + i] = np; B_KEY[n] = k; B_G[n] = B_G[head] + 1; B_MASK[n] = nm; n++;
+          B_POS[n * W + i] = np; B_KEY[n] = k; B_G[n] = B_G[head] + 1; B_MASK[n] = nm; B_BALL[n] = nbl; n++;
         }
       }
     }
@@ -506,10 +595,11 @@ function plainCreaky(C, cap) {
    not even that works, the position is lost for sure. Cheap, and it catches
    most ruined levels: a broken board or a one-way lane has cut a bed off from
    one of its cats. */
-function soloCan(C, b, pos, mask) {
+function soloCan(C, b, pos, mask, balls = 0) {
+  if (C.nBalls && balls) return soloCanYarn(C, b, pos, mask, balls);
   const k = C.count[b], own0 = (mask >>> C.shift[b]) & ((1 << k) - 1);
   if (!own0) return true;
-  const key = (p, o, c) => p + o * 64 + (c >>> C.nCats) * 1024;
+  const key = (p, o, c) => p + o * 64 + (c >>> C.nCats) * 4096;
   const cr0 = mask & C.creak, key0 = key(pos, own0, cr0), memo = C.solo[b];
   let can = memo.get(key0);
   if (can !== undefined) return can;
@@ -529,18 +619,70 @@ function soloCan(C, b, pos, mask) {
   memo.set(key0, can);
   return can;
 }
+// The balls that can never be pushed again, by any bed: on both lines through
+// it (up-down and left-right) there is no side a bed could push from and a
+// free cell to push it to (walls, holes, creaky boards, one-way tiles, the
+// edge of the board and other stuck balls all count). Such a ball is as good
+// as a wall. Other balls might still be pushed out of the way some day.
+function frozenBalls(C, mask, balls) {
+  const cells = unpackBalls(balls), frozen = new Set();
+  const hole = c => C.wall[c] || (C.creakAt[c] >= 0 && !(mask >>> C.creakAt[c] & 1));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const x of cells) {
+      if (frozen.has(x)) continue;
+      let canPush = false;
+      for (let d = 0; d < STEPS && !canPush; d++) {
+        const back = C.step[x * STEPS + (d ^ 1)], to = C.step[x * STEPS + d];
+        if (back >= 0 && !hole(back) && !frozen.has(back) && to >= 0 && C.rollable[to] && !frozen.has(to)) canPush = true;
+      }
+      if (!canPush) { frozen.add(x); changed = true; }
+    }
+  }
+  return frozen;
+}
+// soloCan with yarn balls: the stuck balls (frozenBalls) are walls, the
+// others are left out, since another bed might push them away.
+function soloCanYarn(C, b, pos, mask, balls) {
+  const frozen = frozenBalls(C, mask, balls);
+  if (!frozen.size) return soloCan(C, b, pos, mask);
+  const k = C.count[b], own0 = (mask >>> C.shift[b]) & ((1 << k) - 1);
+  if (!own0) return true;
+  const fz = [...frozen].sort((x, y) => x - y).join(".");
+  if (C.cover[b][pos].some(c => frozen.has(c))) return true;      // can't happen: a bed is never on a ball
+  const cr0 = mask & C.creak, key0 = pos + "," + own0 + "," + cr0 + "," + fz, memo = C.solo[b];
+  let can = memo.get(key0);
+  if (can !== undefined) return can;
+  const seen = new Set([key0]), qp = [pos], qo = [own0], qc = [cr0], nx = C.next[b], crk = C.crk[b];
+  can = false;
+  for (let head = 0; head < qp.length && !can; head++) for (let d = 0; d < STEPS; d++) {
+    const p = qp[head], np = nx[p * STEPS + d];
+    if (np < 0) continue;
+    const on = crk[np];
+    if (on & ~qc[head]) continue;                                  // a broken board is a hole
+    if (C.cover[b][np].some(c => frozen.has(c))) continue;         // a stuck ball is a wall
+    const o = qo[head] & ~C.under[b][np];
+    if (!o) { can = true; break; }
+    const c = qc[head] & ~(crk[p] & ~on), kk = np + "," + o + "," + c + "," + fz;
+    if (seen.has(kk)) continue;
+    seen.add(kk); qp.push(np); qo.push(o); qc.push(c);
+  }
+  memo.set(key0, can);
+  return can;
+}
 // Lost for sure? "pos" holds the bed positions from index "at" on.
-function lostForSure(C, pos, at, mask) {
-  for (let i = 0; i < C.nb; i++) if ((C.own[i] & mask) && !soloCan(C, i, pos[at + i], mask)) return true;
+function lostForSure(C, pos, at, mask, balls = 0) {
+  for (let i = 0; i < C.nb; i++) if ((C.own[i] & mask) && !soloCan(C, i, pos[at + i], mask, balls)) return true;
   return false;
 }
 
 // Fewest single-cell slides, like solve() above but much faster.
 // d: -1 no way, -2 search got too big, -3 needs more than dMax slides.
-// "from" ({ pos, mask }) starts the search somewhere else than the level's start.
+// "from" ({ pos, mask, balls }) starts the search somewhere else than the level's start.
 // "hurry" above 1 gives up on "fewest" and just looks for any way to finish, fast.
 function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
   const nb = C.nb, occ = new Int8Array(C.N), start = from ? from.pos : C.start, mask0 = from ? from.mask : C.full;
+  const balls0 = from ? from.balls || 0 : C.ball0;
   const farOf = (i, p, mask) => C.far[i][p << C.count[i] | (mask >>> C.shift[i] & ((1 << C.count[i]) - 1))];
   let h0 = 0, key0 = 0;
   for (let i = 0; i < nb; i++) {
@@ -548,10 +690,10 @@ function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
     if (C.own[i] & mask0) { h0 += farOf(i, start[i], mask0); key0 += (start[i] + 1) * POW[i]; }
   }
   if (h0 >= NEVER) return { d: -1 };
-  if (C.risky && lostForSure(C, start, 0, mask0)) return { d: -1 };
-  B_MASK[0] = mask0; B_G[0] = 0; B_H[0] = h0; B_PAR[0] = -1; B_DONE[0] = 0; B_KEY[0] = key0;
+  if (C.risky && lostForSure(C, start, 0, mask0, balls0)) return { d: -1 };
+  B_MASK[0] = mask0; B_G[0] = 0; B_H[0] = h0; B_PAR[0] = -1; B_DONE[0] = 0; B_KEY[0] = key0; B_BALL[0] = balls0;
   let n = 1;
-  const seen = new Map([[mask0, new Map([[key0, 0]])]]);
+  const seen = new Map([[withBalls(mask0, balls0), new Map([[key0, 0]])]]);
   const buckets = []; buckets[h0 * hurry] = [0];
   for (let f = h0 * hurry; f <= dMax * hurry;) {
     const bk = buckets[f];
@@ -569,7 +711,8 @@ function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
         for (let j = 1; j < path.length; j++) if (path[j][0] !== path[j - 1][0]) switches++;
         return { d: path.length, switches, path, states: n };
       }
-      fillOcc(C, occ, B_POS, at * W, mask);
+      fillOcc(C, occ, B_POS, at * W, mask, B_BALL[at]);
+      const ballsHere = B_BALL[at];
       for (let i = 0; i < nb; i++) {
         if (!canMove(C, mask, i)) continue;
         const p = B_POS[at * W + i], hRest = B_H[at] - farOf(i, p, mask);
@@ -582,8 +725,9 @@ function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
           const h = gone ? hRest : hRest + farOf(i, np, nm);
           if (h >= NEVER || g + 1 + h > dMax) continue;
           const key = B_KEY[at] + ((gone ? 0 : np + 1) - (p + 1)) * POW[i];
-          let m = seen.get(nm);
-          if (!m) seen.set(nm, m = new Map());
+          const nbl = C.nBalls ? BALLS_AFTER : 0, sk = withBalls(nm, nbl);
+          let m = seen.get(sk);
+          if (!m) seen.set(sk, m = new Map());
           let to = m.get(key);
           if (to !== undefined) {
             if (B_DONE[to] || B_G[to] <= g + 1) continue;          // been here just as fast
@@ -593,11 +737,11 @@ function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
             m.set(key, to);
             for (let j = 0; j < nb; j++) B_POS[to * W + j] = B_POS[at * W + j];
             B_POS[to * W + i] = gone ? -1 : np;
-            B_MASK[to] = nm; B_H[to] = h; B_KEY[to] = key;
-            // a board just broke, or a bed went down a one-way lane: if that cut a bed off
-            // from its cats, never go on from here
-            B_DONE[to] = ((nm & C.creak) !== (mask & C.creak) && lostForSure(C, B_POS, to * W, nm))
-              || (C.arrows && !gone && !soloCan(C, i, np, nm)) ? 1 : 0;
+            B_MASK[to] = nm; B_H[to] = h; B_KEY[to] = key; B_BALL[to] = nbl;
+            // a board just broke, a bed went down a one-way lane, or a ball rolled: if that
+            // cut a bed off from its cats, never go on from here
+            B_DONE[to] = (((nm & C.creak) !== (mask & C.creak) || nbl !== ballsHere) && lostForSure(C, B_POS, to * W, nm, nbl))
+              || (C.arrows && !gone && !soloCan(C, i, np, nm, nbl)) ? 1 : 0;
             if (B_DONE[to]) continue;
           }
           B_G[to] = g + 1; B_PAR[to] = at; B_MV[to] = i * 4 + d;
@@ -612,9 +756,9 @@ function solveFast(C, dMax = 120, cap = 400000, from = null, hurry = 1) {
 }
 
 // Is the level lost from this position? true / false, or null if it could not be worked out.
-function isLost(C, pos, mask) {
-  if (lostForSure(C, pos, 0, mask)) return true;
-  const r = solveFast(C, 250, 60000, { pos, mask }, 3);
+function isLost(C, pos, mask, balls = 0) {
+  if (lostForSure(C, pos, 0, mask, balls)) return true;
+  const r = solveFast(C, 250, 60000, { pos, mask, balls }, 3);
   return r.d === -2 ? null : r.d < 0;
 }
 
@@ -624,6 +768,8 @@ function isLost(C, pos, mask) {
       broken and asks: is the level lost now? If yes, that board is a trap.
     - For each one-way tile it looks for a bed that rides it and is then cut
       off from one of its cats. If there is one, that tile is a trap.
+    - For yarn balls it takes the earliest few pushes (up to 40) and asks the
+      same: is the level lost now? Each ball that can be lost that way is a trap.
    A trap is a real dead end the player can walk into. Also counts how many of
    the very first slides already ruin the level ("ruin": 0 = none, 1 = all).
    Returns { traps, depth (slides to the nearest trap), ruin }. */
@@ -631,14 +777,15 @@ function trapsOf(C, cap = 20000) {
   const occ = new Int8Array(C.N), nb = C.nb;
   const first = new Map();                                         // board bit -> earliest position where it is broken
   const lane = new Map();                                          // one-way tile -> slides until a bed is lost on it
+  const pushes = new Map();                                        // balls after a push -> earliest position
   const firstMoves = [];
   let key0 = 0, n = 1;
   for (let i = 0; i < nb; i++) { B_POS[i] = C.start[i]; key0 += (C.start[i] + 1) * POW[i]; }
-  B_MASK[0] = C.full; B_G[0] = 0; B_KEY[0] = key0;
-  const seen = new Map([[C.full, new Set([key0])]]);
-  for (let head = 0; head < n && (first.size < C.nCreak || C.arrows); head++) {
-    const hm = B_MASK[head];
-    fillOcc(C, occ, B_POS, head * W, hm);
+  B_MASK[0] = C.full; B_G[0] = 0; B_KEY[0] = key0; B_BALL[0] = C.ball0;
+  const seen = new Map([[withBalls(C.full, C.ball0), new Set([key0])]]);
+  for (let head = 0; head < n && (first.size < C.nCreak || C.arrows || (C.nBalls && pushes.size < 40)); head++) {
+    const hm = B_MASK[head], hb = B_BALL[head];
+    fillOcc(C, occ, B_POS, head * W, hm, hb);
     for (let i = 0; i < nb; i++) {
       if (!canMove(C, hm, i)) continue;
       const p = B_POS[head * W + i];
@@ -651,93 +798,110 @@ function trapsOf(C, cap = 20000) {
         const pos = Array.from(B_POS.subarray(head * W, head * W + nb));
         pos[i] = gone ? -1 : np;
         const tile = C.arrows ? (C.arw[i][np] >= 0 ? C.arw[i][np] : C.arw[i][p]) : -1;
-        if (head === 0) firstMoves.push({ pos, mask: nm, risky: C.crk[i][np] !== 0 || tile >= 0 });
+        const nbl = C.nBalls ? BALLS_AFTER : 0, pushed = nbl !== hb;
+        if (head === 0) firstMoves.push({ pos, mask: nm, balls: nbl, risky: C.crk[i][np] !== 0 || tile >= 0 || pushed });
+        if (pushed && !pushes.has(nbl) && pushes.size < 40) pushes.set(nbl, { pos, mask: nm, balls: nbl, depth: B_G[head] + 1 });
         const broke = (hm & C.creak) & ~nm;
         for (let bit = broke; bit; bit &= bit - 1) {
           const one = bit & -bit;
-          if (!first.has(one)) first.set(one, { pos, mask: nm, depth: B_G[head] + 1 });
+          if (!first.has(one)) first.set(one, { pos, mask: nm, balls: nbl, depth: B_G[head] + 1 });
         }
-        if (tile >= 0 && !gone && !soloCan(C, i, np, nm)) {        // rode a one-way tile and is cut off now
+        if (tile >= 0 && !gone && !soloCan(C, i, np, nm, nbl)) {   // rode a one-way tile and is cut off now
           if (!lane.has(tile)) lane.set(tile, B_G[head] + 1);
           continue;
         }
         const k = B_KEY[head] + ((gone ? 0 : np + 1) - (p + 1)) * POW[i];
-        let m = seen.get(nm);
-        if (!m) seen.set(nm, m = new Set());
+        let m = seen.get(withBalls(nm, nbl));
+        if (!m) seen.set(withBalls(nm, nbl), m = new Set());
         if (m.has(k) || n >= cap) continue;
         m.add(k);
         for (let j = 0; j < nb; j++) B_POS[n * W + j] = pos[j];
-        B_KEY[n] = k; B_G[n] = B_G[head] + 1; B_MASK[n] = nm; n++;
+        B_KEY[n] = k; B_G[n] = B_G[head] + 1; B_MASK[n] = nm; B_BALL[n] = nbl; n++;
       }
     }
   }
   // the searches below use the same scratch pad, so they come after the walk above
   let traps = lane.size, depth = 99, ruined = 0;
   for (const d of lane.values()) depth = Math.min(depth, d);
-  for (const w of first.values()) if (isLost(C, w.pos, w.mask) === true) { traps++; depth = Math.min(depth, w.depth); }
-  // a first slide can only ruin the level if it puts a bed on a creaky board or a one-way tile
-  for (const m of firstMoves) if (m.risky && isLost(C, m.pos, m.mask) === true) ruined++;
+  for (const w of first.values()) if (isLost(C, w.pos, w.mask, w.balls || 0) === true) { traps++; depth = Math.min(depth, w.depth); }
+  // yarn: count the balls that can be pushed so the level is lost (at most 3)
+  const lostBalls = new Set();
+  for (const w of pushes.values()) {
+    if (lostBalls.size >= 3) break;
+    if (isLost(C, w.pos, w.mask, w.balls) !== true) continue;
+    lostBalls.add(w.balls); depth = Math.min(depth, w.depth);
+  }
+  traps += lostBalls.size;
+  // a first slide can only ruin the level if it puts a bed on a creaky board or a one-way tile, or pushes a ball
+  for (const m of firstMoves) if (m.risky && isLost(C, m.pos, m.mask, m.balls) === true) ruined++;
   return { traps, depth, ruin: firstMoves.length ? ruined / firstMoves.length : 0 };
 }
 
 /* ---------- silent dead ends ----------
    A dead end is fair only if it shows itself. The game checks for one right
-   after a board breaks, a bed rides an arrow, or a bed steps onto a creaky
-   board. The sneaky case: a bed steps onto a creaky board (nothing breaks yet),
-   and that already loses the level, because the bed has to leave the board
-   some day and then another bed can no longer get through. The player can go
-   on tucking in cats for a long time before anything breaks.
-   (Other quiet slides can never lose a level: a slide on plain floor can be
-   slid back, and tucking in a cat only frees room.)
+   after a board breaks, a bed rides an arrow, a bed steps onto a creaky board,
+   or a ball rolls.
+   Sneaky case 1: a bed steps onto a creaky board (nothing breaks yet), and that
+   already loses the level, because the bed has to leave the board some day and
+   then another bed can no longer get through. The player can go on tucking in
+   cats for a long time before anything breaks.
+   Sneaky case 2: a ball rolls somewhere that loses the level, but working that
+   out takes a long search, so the game's check gives up and says nothing.
+   Here a dead end after a push only counts as fair if isLost can prove it.
+   (Other slides can never lose a level: a slide on plain floor can be slid
+   back, and tucking in a cat only frees room.)
    This looks at every position near the start ("near" slides of play, up to
    "cap" positions) and at every position on the stored solution, and counts
-   the slides onto a creaky board that turn a level that could still be won
-   into one that can not. A level with any of those is thrown away. */
+   those sneaky slides. A level with any of them is thrown away. */
 function silentDeadEnds(C, path, near = 4, cap = 1500) {
-  if (!C.creak) return 0;
+  if (!C.creak && !C.nBalls) return 0;
   const occ = new Int8Array(C.N), nb = C.nb, memo = new Map();
-  const keyOf = (pos, mask) => pos.join(",") + "/" + mask;
-  const lost = (pos, mask) => {
-    const k = keyOf(pos, mask);
-    if (!memo.has(k)) memo.set(k, isLost(C, pos, mask));
+  const keyOf = (pos, mask, balls) => pos.join(",") + "/" + mask + "/" + balls;
+  const lost = (pos, mask, balls) => {
+    const k = keyOf(pos, mask, balls);
+    if (!memo.has(k)) memo.set(k, isLost(C, pos, mask, balls));
     return memo.get(k);
   };
   // the positions to look at: near the start, and along the solution
   const todo = [], seen = new Set();
-  const add = (pos, mask, depth) => { const k = keyOf(pos, mask); if (!seen.has(k) && todo.length < cap) { seen.add(k); todo.push({ pos, mask, depth }); } };
-  add(C.start.slice(), C.full, 0);
+  const add = (pos, mask, balls, depth) => { const k = keyOf(pos, mask, balls); if (!seen.has(k) && todo.length < cap) { seen.add(k); todo.push({ pos, mask, balls, depth }); } };
+  add(C.start.slice(), C.full, C.ball0, 0);
   {
     const pos = C.start.slice();
-    let mask = C.full;
+    let mask = C.full, balls = C.ball0;
     for (const [i, dr, dc] of path) {
-      fillOcc(C, occ, pos, 0, mask);
+      fillOcc(C, occ, pos, 0, mask, balls);
       const d = DIRS.findIndex(x => x[0] === dr && x[1] === dc), np = C.next[i][pos[i] * STEPS + d];
       mask = moveMask(C, occ, mask, i, pos[i], np);
+      if (C.nBalls) balls = BALLS_AFTER;
       pos[i] = mask & C.own[i] ? np : -1;
-      add(pos.slice(), mask, near);                                 // "near": do not walk on from here
+      add(pos.slice(), mask, balls, near);                          // "near": do not walk on from here
     }
   }
   let found = 0;
   for (let head = 0; head < todo.length; head++) {
-    const { pos, mask, depth } = todo[head];
-    fillOcc(C, occ, pos, 0, mask);
+    const { pos, mask, balls, depth } = todo[head];
+    fillOcc(C, occ, pos, 0, mask, balls);
     for (let i = 0; i < nb; i++) {
       if (!canMove(C, mask, i)) continue;
       const p = pos[i];
       for (let d = 0; d < STEPS; d++) {
         const np = C.next[i][p * STEPS + d];
         if (np < 0) continue;
+        if (C.nBalls) setBalls(C, balls);                           // the searches below move them about
         const nm = moveMask(C, occ, mask, i, p, np);
         if (nm < 0) continue;
+        const nbl = C.nBalls ? BALLS_AFTER : 0;
         const npos = pos.slice();
         npos[i] = nm & C.own[i] ? np : -1;
-        // quiet, and onto a board it was not on before?
+        // 1. quiet, and onto a board it was not on before?
         const onto = C.crk[i][np] & ~C.crk[i][p];
-        if (onto && (nm & C.creak) === (mask & C.creak) && npos[i] >= 0 && lost(npos, nm) === true && lost(pos, mask) === false) found++;
-        if (depth < near) add(npos, nm, depth + 1);
+        if (onto && (nm & C.creak) === (mask & C.creak) && npos[i] >= 0 && lost(npos, nm, nbl) === true && lost(pos, mask, balls) === false) found++;
+        // 2. a ball rolled, and nobody can tell quickly whether that lost the level?
+        if (nbl !== balls && lost(npos, nm, nbl) === null && lost(pos, mask, balls) === false) found++;
+        if (depth < near) add(npos, nm, nbl, depth + 1);
       }
     }
-    fillOcc(C, occ, pos, 0, mask);
   }
   return found;
 }
@@ -749,6 +913,7 @@ function silentDeadEnds(C, path, near = 4, cap = 1500) {
    Returns { extra, exact }. If the search gets too big it stops and says
    "at least this many" (exact: false). */
 function extraTurns(C, cap = 300000, stopAt = 99) {
+  if (C.nBalls) throw new Error("extraTurns does not know yarn balls: count on the level without them");
   const nb = C.nb, occ = new Int8Array(C.N);
   const alive = mask => { let a = 0; for (let i = 0; i < nb; i++) if (C.own[i] & mask) a++; return a; };
   let key0 = 0;
@@ -805,6 +970,7 @@ function extraTurns(C, cap = 300000, stopAt = 99) {
 
 // thinking(), on the fast engine. Same answer, much quicker.
 function thinkingFast(C) {
+  if (C.nBalls) throw new Error("thinkingFast does not know yarn balls: count on the level without them");
   const occ = new Int8Array(C.N), nb = C.nb, pos = C.start.slice();
   let mask = C.full, rounds = 0;
   const solo = i => {
@@ -895,11 +1061,16 @@ function randomLevel(t) {
   // How big is each bed? Every bed needs as many cats as it has cells, so the
   // tier says how many bed cells the whole board may hold ("cells") and which
   // bed sizes to draw from ("sizes").
+  // A family tier ("family": 1) gives one bed the 6-cell family shape, and the board
+  // may hold 2 more bed cells. (Only those tiers roll the extra dice, so older
+  // chapters come out exactly as before.)
+  const family = t.family && rnd() < t.family, top = t.cells[1] + (family ? 2 : 0);
   let sizes = null;
   for (let tries = 0; tries < 60 && !sizes; tries++) {
     const s = bedColors.map(() => pick(t.sizes));
+    if (family) s[Math.floor(rnd() * s.length)] = 6;
     const sum = s.reduce((a, b) => a + b, 0);
-    if (sum >= t.cells[0] && sum <= t.cells[1]) sizes = s;
+    if (sum >= t.cells[0] && sum <= top) sizes = s;
   }
   if (!sizes) return null;
   const beds = [];
@@ -1007,7 +1178,11 @@ const BOARDS = {
                        the levels: a fifth in chapter 22, 4 in 10 in chapter 28
        4     29 to 36  one-way floor (taught in chapter 29), then in most levels;
                        creaky boards stay in about a third
-       5     37 to 44  yarn balls         (not in the solver or the game yet)
+       5     37 to 44  yarn balls (taught in chapter 37), then in most levels
+                       (6 to 8 in 10); one-way tiles and creaky boards in about
+                       3 in 10 each
+                       From chapter 33 on, about 1 level in 8 has a family bed
+                       (6 cells, 6 cats) on a 7x6 or 8x6 board.
        6     45 to 52  ice patches        (not yet)
        7     53 to 60  buttons and doors  (not yet)
        8     61 to 68  cat flaps          (not yet)
@@ -1019,9 +1194,11 @@ const BOARDS = {
    it goes up inside a season, steps back a little when a new season starts, and
    grows slowly over all 80 chapters (fast at first, then ever slower), so there
    is still room to get harder at chapter 80. Until the new twists of seasons
-   5 to 9 exist, those chapters are made with the twists we have: the formula
+   6 to 9 exist, those chapters are made with the twists we have: the formula
    works for any chapter number today. No creaky boards before chapter 21, no
-   one-way tiles before chapter 29, and neither is ever in every level. */
+   one-way tiles before chapter 29, no yarn before chapter 37, and creaky boards
+   and one-way tiles are never in every level of a chapter. Every chapter ends
+   on its hardest level (the game makes it the "cozy challenge"). */
 const SEASONS = [[1, 10], [11, 20], [21, 28], [29, 36], [37, 44], [45, 52], [53, 60], [61, 68], [69, 76], [77, 80]];
 function seasonOf(num) {
   let i = SEASONS.findIndex(([from, to]) => num >= from && num <= to);
@@ -1136,7 +1313,7 @@ function twistsFor(num) {
     gates: climb < 0.5 ? [1, 2] : climb < 0.7 ? [2, 3] : climb < 0.9 ? [2, 4] : [3, 5],
     blankets: Math.min(0.9, Math.round(40 + 75 * (climb - 0.36)) / 100),
   };
-  const out = num === 21 ? { hint: "h_creaky" } : num === 29 ? { hint: "h_oneway" } : {};
+  const out = num === 21 ? { hint: "h_creaky" } : num === 29 ? { hint: "h_oneway" } : num === 37 ? { hint: "h_yarn" } : {};
   const howMany = num < 16 ? 3 : 4;
   for (let i = 0; i < howMany; i++) out[names[(num + i) % 4]] = strong[names[(num + i) % 4]];
   return out;
@@ -1173,15 +1350,17 @@ function chapterFor(num) {
   const traps = {
     creaky: climb < 0.7 ? [1, 2] : climb < 0.85 ? [1, 3] : [2, 4],
     arrows: climb < 0.8 ? [2, 4] : [3, 6],
+    yarn: climb < 0.8 ? [1, 2] : [1, 3],
     nasty: part(0.55, 0.45), nastiest: part(0.85, 0.17),
   };
   const tiers = [];
   // the chapter that teaches a trap opens with 5 gentle levels (taken from the biggest board's share)
-  const teaches = num === 21 ? "creaky" : num === 29 ? "arrows" : null;
+  const teaches = num === 21 ? "creaky" : num === 29 ? "arrows" : num === 37 ? "yarn" : null;
+  const teachAmount = { creaky: [1, 2], arrows: [2, 3], yarn: [1, 2] }, bridgeAmount = { creaky: [1, 2], arrows: [2, 4], yarn: [1, 2] };
   if (teaches) {
-    const small = BOARDS[teaches === "creaky" ? "b" : "c"];
+    const small = BOARDS[teaches === "arrows" ? "c" : "b"];
     tiers.push(Object.assign({ n: 5, name: "teaching " + teaches, intro: true }, small, {
-      [teaches]: teaches === "creaky" ? [1, 2] : [2, 3], nasty: 0, nastiest: 0, trapDepth: 4,
+      [teaches]: teachAmount[teaches], nasty: 0, nastiest: 0, trapDepth: 4,
       sAim: 2, sMin: 1, sMax: 4, eMin: 1, eMax: 6, dMin: small.dBase + 4, dMax: small.dBase + 30, grow: 400,
     }));
     ch.tiers[ch.tiers.length - 1].n -= 5;
@@ -1189,12 +1368,13 @@ function chapterFor(num) {
     // before the chapter goes on to the big boards
     const mid = BOARDS.d5;
     tiers.push(Object.assign({ n: 3, name: "bridging " + teaches, intro: true }, mid, {
-      [teaches]: teaches === "creaky" ? [1, 2] : [2, 4], nasty: 0, nastiest: 0, trapDepth: 6,
+      [teaches]: bridgeAmount[teaches], nasty: 0, nastiest: 0, trapDepth: 6,
       sAim: 3.5, sMin: 3, sMax: 6, eMin: 2, eMax: 99, dMin: mid.dBase + 6, dMax: mid.dBase + 40, grow: 400,
     }));
     ch.tiers[ch.tiers.length - 1].n -= 3;
   }
-  for (const t of ch.tiers) {
+  if (num >= 37) laterTraps(num, ch.tiers, tiers, traps);
+  else for (const t of ch.tiers) {
     const both = Math.round(t.n * arrowShare * creakyShare);
     const onlyArrows = Math.max(0, Math.round(t.n * arrowShare) - both), onlyCreaky = Math.max(0, Math.min(t.n - both - onlyArrows, Math.round(t.n * creakyShare) - both));
     // a level with traps is harder anyway, so it aims for half a step-aside less
@@ -1212,8 +1392,40 @@ function chapterFor(num) {
     big.n--;
     tiers.push(Object.assign({}, big, { n: 1, name: big.name + " creaky", creaky: traps.creaky, sAim: big.sAim - 0.5, sMin: Math.floor(big.sAim - 0.5), eMin: Math.floor(big.sAim - 0.5), nasty: traps.nasty, nastiest: traps.nastiest }));
   }
+  // From chapter 33: about 1 level in 8 has a family bed (6 cells). Never in the
+  // teaching or bridging levels, only on the 7x6 and 8x6 boards: one level is
+  // taken from each of the 3 biggest groups there.
+  if (num >= 33) {
+    const groups = tiers.filter(t => !t.intro && t.rows >= 7 && t.n >= 2).sort((a, b) => b.n - a.n).slice(0, 3);
+    for (const g of groups) {
+      g.n--;
+      tiers.push(Object.assign({}, g, { n: 1, name: g.name + ", family bed", family: 1 }));
+    }
+  }
   ch.tiers = tiers;
   return ch;
+}
+// From chapter 37 (season 5): yarn balls in most levels, one-way tiles and
+// creaky boards in a minority, any mix of them. Each group of levels is split
+// so the shares come out right and the mixes spread out.
+function laterTraps(num, from, tiers, traps) {
+  const yarnShare = num === 37 ? 0.6 : Math.min(0.8, 0.7 + 0.05 * (num - 38)), arrowShare = 0.3, creakyShare = 0.3;
+  for (const t of from) {
+    const n = t.n, mix = Array.from({ length: n }, () => ({}));
+    const nY = Math.round(n * yarnShare), nA = Math.round(n * arrowShare), nC = Math.round(n * creakyShare);
+    for (let j = 0; j < nY; j++) mix[j].yarn = true;
+    for (let j = 0; j < nA; j++) mix[(nY + j) % n].arrows = true;
+    for (let j = 0; j < nC; j++) mix[(nY + nA + j) % n].creaky = true;
+    const groups = new Map();
+    for (const m of mix) { const k = ["yarn", "arrows", "creaky"].filter(x => m[x]).join(" + "); groups.set(k, (groups.get(k) || 0) + 1); }
+    for (const [k, count] of groups) {
+      if (!k) { tiers.push(Object.assign({}, t, { n: count })); continue; }
+      // a level with traps is harder anyway, so it aims for half a step-aside less
+      const sAim = t.sAim - 0.5, more = { sAim, sMin: Math.floor(sAim), eMin: Math.floor(sAim), nasty: traps.nasty, nastiest: traps.nastiest, name: t.name + " " + k };
+      for (const x of k.split(" + ")) more[x] = traps[x];
+      tiers.push(Object.assign({}, t, more, { n: count }));
+    }
+  }
 }
 const PER_CHAPTER = 25;
 
@@ -1229,11 +1441,11 @@ const PER_CHAPTER = 25;
    up inside a season, a small step back at a new season. */
 function hardness(p) {
   return p.best + p.asides * 6 + p.extra * 6 + Math.min(1, p.wander - 1) * 80 + p.rounds * 4 + p.area * 0.3
-    + p.boards * 3 + p.arrows * 2 + p.traps * 6 + p.ruin * 60 + (p.dies ? 15 : 0);
+    + p.boards * 3 + p.arrows * 2 + (p.balls || 0) * 3 + p.traps * 6 + p.ruin * 60 + (p.dies ? 15 : 0);
 }
 // the part of the score that is the same for every level of a tier: twists in play and the clock
 function tierBonus(t, chapter) {
-  const twists = ["rail", "locks", "gates", "blankets", "creaky", "arrows"].filter(k => t[k]).length;
+  const twists = ["rail", "locks", "gates", "blankets", "creaky", "arrows", "yarn"].filter(k => t[k]).length;
   return twists * 3 + (1 - squeezeOf(chapter)) * 60;
 }
 // The average score a chapter (9 and up) should come out at. (Chapters 1 to 8
@@ -1244,10 +1456,10 @@ function tierBonus(t, chapter) {
 //  - a new season starts a little under the last finale, but above the start
 //    of the season before,
 //  - a season that brings a new trap scores higher for it (creaky boards +8,
-//    one-way tiles +14 more), and its first chapter, the one that teaches the
-//    trap with five gentle levels, a little lower.
+//    one-way tiles +14 more, yarn balls +8 more), and its first chapter, the
+//    one that teaches the trap with five gentle levels, a little lower.
 // In numbers: 146 in chapter 9, 153 in 10, 150 in 11, 190 in 20, 176 in 21,
-// 207 in 28, 197 in 29, 214 in 32, 231 in 36, 267 in 80.
+// 207 in 28, 197 in 29, 214 in 32, 231 in 36, 215 in 37, 232 in 40.
 // The numbers were fitted to what chapters 9 to 32 can give. If a later
 // chapter can not reach its score, the log says so with "!!": then its knobs
 // (laterTiers, chapterFor) need to give more, or a new twist has to add its own
@@ -1255,8 +1467,8 @@ function tierBonus(t, chapter) {
 function targetFor(num) {
   if (num <= 10) return num === 9 ? 146 : 153;                     // the end of season 1, tied to where chapter 8 came out
   const { season, part } = seasonOf(num);
-  const newTraps = season >= 4 ? 22 : season === 3 ? 8 : 0;
-  const teaching = num === 21 ? 3 : num === 29 ? 4 : 0;
+  const newTraps = season >= 5 ? 30 : season === 4 ? 22 : season === 3 ? 8 : 0;
+  const teaching = num === 21 ? 3 : num === 29 || num === 37 ? 4 : 0;
   // the score counts a tight clock too; the targets were fitted with the clock as
   // first planned, so a kinder clock must not be made up for with harder puzzles
   const kinderClock = 60 * (squeezeOf(num) - plannedSqueeze(num));
@@ -1406,7 +1618,7 @@ function candidate(t) {
   if (r.d < t.dMin) return no("too short or too long");
   const th = thinkingFast(C);
   // creaky boards and one-way tiles go onto a level that is already a good puzzle without them
-  const hasTraps = t.creaky || t.arrows, creaky = hasTraps ? addTraps(t, lv, r.path) : null;
+  const hasTraps = t.creaky || t.arrows || t.yarn, creaky = hasTraps ? addTraps(t, lv, r.path) : null;
   if (hasTraps && !creaky) return no("no good place for traps");
   let extra = 0;
   if (!th.tricky) {
@@ -1419,10 +1631,10 @@ function candidate(t) {
     extra = e.extra;
   }
   // how hard is it? (see hardness)
-  const parts = { best: r.d, asides: plain.asides, extra, wander: plain.slides / r.d, rounds: th.rounds, area: t.rows * t.cols, boards: 0, arrows: 0, traps: 0, ruin: 0, dies: false };
+  const parts = { best: r.d, asides: plain.asides, extra, wander: plain.slides / r.d, rounds: th.rounds, area: t.rows * t.cols, boards: 0, arrows: 0, balls: 0, traps: 0, ruin: 0, dies: false };
   if (creaky) {
     lv = creaky.lv;                                                // same solution, same fewest slides
-    Object.assign(parts, { boards: creaky.boards, arrows: creaky.arrows, traps: creaky.trap.traps, ruin: creaky.trap.ruin, dies: creaky.plain.dead });
+    Object.assign(parts, { boards: creaky.boards, arrows: creaky.arrows, balls: creaky.balls, traps: creaky.trap.traps, ruin: creaky.trap.ruin, dies: creaky.plain.dead });
     parts.wander = creaky.plain.dead ? 1.5 : creaky.plain.slides / r.d;
   }
   return { lv, r, th, extra, plain, creaky, hard: hardness(parts) };
@@ -1432,16 +1644,16 @@ function candidate(t) {
 // and checks). Step-asides and extra turns are counted with the creaky boards
 // and one-way tiles taken as plain floor, the same way the generator does it.
 function difficulty(lv, chapter) {
-  const flat = lv.map.join(""), boards = (flat.match(/c/g) || []).length, arrows = (flat.match(/[\^v<>]/g) || []).length;
-  const C = compile(lv), C0 = boards + arrows ? compile({ ...lv, map: lv.map.map(row => row.replace(/[c^v<>]/g, ".")) }) : C;
+  const flat = lv.map.join(""), boards = (flat.match(/c/g) || []).length, arrows = (flat.match(/[\^v<>]/g) || []).length, balls = (flat.match(/y/g) || []).length;
+  const C = compile(lv), C0 = boards + arrows + balls ? compile({ ...lv, map: lv.map.map(row => row.replace(/[c^v<>y]/g, ".")) }) : C;
   const plain = plainPlayer(C0, 400000), th = thinkingFast(C0);
-  const p = { best: lv.best, asides: plain.asides, extra: th.tricky ? extraTurns(C0, 600000, 100).extra : 0, wander: plain.slides / lv.best, rounds: th.rounds, area: lv.rows * lv.cols, boards, arrows, traps: 0, ruin: 0, dies: false };
-  if (boards + arrows) {
+  const p = { best: lv.best, asides: plain.asides, extra: th.tricky ? extraTurns(C0, 600000, 100).extra : 0, wander: plain.slides / lv.best, rounds: th.rounds, area: lv.rows * lv.cols, boards, arrows, balls, traps: 0, ruin: 0, dies: false };
+  if (boards + arrows + balls) {
     const trap = trapsOf(C), real = plainPlayer(C, 400000);
     Object.assign(p, { traps: trap.traps, ruin: trap.ruin, dies: real.dead });
     p.wander = real.dead ? 1.5 : real.slides / lv.best;
   }
-  const twists = { rail: lv.beds.some(b => b.axis), locks: lv.beds.some(b => b.lock !== undefined), gates: !!lv.gates, blankets: !!lv.blankets, creaky: boards > 0, arrows: arrows > 0 };
+  const twists = { rail: lv.beds.some(b => b.axis), locks: lv.beds.some(b => b.lock !== undefined), gates: !!lv.gates, blankets: !!lv.blankets, creaky: boards > 0, arrows: arrows > 0, yarn: balls > 0 };
   return { ...p, score: hardness(p) + tierBonus(twists, chapter) };
 }
 
@@ -1537,14 +1749,40 @@ function layArrows(lv, path, want) {
   for (const [idx, d] of tiles) out = withCells(out, [idx], ARROWS[d]);
   return { lv: out, count: tiles.size };
 }
-// Try a few ways to lay traps (one-way tiles, creaky boards, or both) on a
-// level. The level's own solution still works with them, so the fewest slides
+// Yarn balls for a level, laid so that the solution we have still works (the
+// beds push them out of the way as they go). Best are cells the solution's
+// beds slide over: there a ball is in the way, and pushing it the wrong way
+// can lose the level. Next best are cells right beside the solution's path.
+function layYarn(lv, path, want) {
+  const P = prepare(lv), occ = new Int8Array(P.N), flat = lv.map.join("");
+  const crossed = new Uint8Array(P.N), free = [];
+  let s = startState(lv);
+  occupancy(P, s, occ);
+  for (let i = 0; i < P.N; i++) if (flat[i] === "." && occ[i] < 0) free.push(i);   // no bed may start on one
+  for (const [i, dr, dc] of path) { s = slide(P, s, occ, i, dr, dc); occupancy(P, s, occ); for (let k = 0; k < P.N; k++) if (occ[k] >= 0) crossed[k] = 1; }
+  const near = idx => DIRS.some(([dr, dc]) => { const r = ((idx / P.cols) | 0) + dr, c = idx % P.cols + dc; return r >= 0 && c >= 0 && r < P.rows && c < P.cols && crossed[r * P.cols + c]; });
+  const spots = free.map(idx => ({ idx, weight: crossed[idx] ? 6 : near(idx) ? 2 : 1 }));
+  if (!spots.some(x => x.weight > 1)) return null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const left = spots.slice(), cells = [];
+    for (let k = want; k > 0 && left.length; k--) {
+      let roll = rnd() * left.reduce((sum, x) => sum + x.weight, 0), at = 0;
+      while (at < left.length - 1 && (roll -= left[at].weight) >= 0) at++;
+      cells.push(left.splice(at, 1)[0].idx);
+    }
+    const out = withCells(lv, cells, "y");
+    if (replays(out, path)) return { lv: out, count: cells.length };
+  }
+  return null;
+}
+// Try a few ways to lay traps (one-way tiles, creaky boards, yarn balls, or a
+// mix) on a level. The level's own solution still works with them, so the fewest slides
 // stay the same. Keeps the first way that has a real dead end (see chapterFor).
 function addTraps(t, lv, path) {
   const spots0 = t.creaky && !t.arrows ? creakySpots(lv, path) : null;
   if (spots0 && !spots0.some(x => x.weight > 1)) return null;
   for (let attempt = 0; attempt < (t.arrows && t.creaky ? 6 : 12); attempt++) {
-    let lv2 = lv, arrows = 0, boards = 0;
+    let lv2 = lv, arrows = 0, boards = 0, balls = 0;
     if (t.arrows) {
       const laid = layArrows(lv, path, between(t.arrows));
       if (!laid) return null;
@@ -1562,6 +1800,11 @@ function addTraps(t, lv, path) {
       if (!onPath) continue;                                       // only decoys: no trap in that
       lv2 = withCells(lv2, cells, "c"); boards = cells.length;
     }
+    if (t.yarn) {
+      const laid = layYarn(lv2, path, between(t.yarn));
+      if (!laid) { no("  traps: no good place for yarn"); continue; }
+      lv2 = laid.lv; balls = laid.count;
+    }
     if (!replays(lv2, path)) { no("  traps: solution broke"); continue; }   // should not happen: a safety net
     const C = compile(lv2);
     if (!C) continue;
@@ -1575,7 +1818,7 @@ function addTraps(t, lv, path) {
     const mustFall = rnd() < t.nasty, worst = mustFall && rnd() < t.nastiest;
     if (mustFall && !plain.dead) { no("  traps: plain player gets through"); continue; }
     if (worst && trap.ruin === 0 && trap.traps < 2) { no("  traps: not nasty enough"); continue; }
-    return { lv: lv2, plain, trap, boards, arrows };
+    return { lv: lv2, plain, trap, boards, arrows, balls };
   }
   return null;
 }
@@ -1670,6 +1913,7 @@ function buildChapter(num) {
     ordered = slots.map(slot => (isBreather(slot) ? easy : climb).shift());
   }
   const all = fixed.concat(ordered);
+  for (const swap of SWAPS[num] || []) all[swap.slot - 1] = gentler(ch, num, swap, all[swap.slot - 1].r.d);
   const levels = [], solutions = [];
   all.forEach(({ lv, r }, i) => {
     if (new Set(lv.beds.map(b => b.color)).size !== lv.beds.length) throw new Error("two beds share a color");
@@ -1680,6 +1924,29 @@ function buildChapter(num) {
     levels.push(out); solutions.push(path);
   });
   return { levels, solutions };
+}
+
+/* ---------- swaps ----------
+   A level the play-test found unfair for its place, swapped for a gentler one
+   of the same kind: fewer step-asides and no more slides. buildChapter does
+   the swap, so building the chapter again gives the same levels, and
+   "node tools/levels.js swap 29" does it on the chapter file that is there.
+    - level 706 (chapter 29, place 6) and level 908 (chapter 37, place 8):
+      bridging levels nobody but the most careful players got 3 stars on. */
+const SWAPS = { 29: [{ slot: 6, tier: "bridging arrows" }], 37: [{ slot: 8, tier: "bridging yarn" }] };
+function gentler(ch, num, { slot, tier }, maxSlides) {
+  const t0 = ch.tiers.find(t => t.name === tier);
+  const t = Object.assign({}, t0, { sMin: Math.max(1, t0.sMin - 1), sMax: t0.sMin, sAim: Math.max(1, t0.sMin - 1) + 0.5, eMin: 1 });
+  setSeed(31337 * num + slot);
+  const found = [];
+  for (let tries = 0; tries < 300000 && found.length < 6; tries++) {
+    const c = candidate(t);
+    if (c && c.r.d <= maxSlides) found.push(c);
+  }
+  if (!found.length) throw new Error(`no gentler level found for chapter ${num}, place ${slot}`);
+  found.sort((a, b) => a.plain.asides - b.plain.asides || a.r.d - b.r.d || a.hard - b.hard);
+  process.stderr.write(`ch${num} place ${slot}: swapped for a gentler ${tier} level (slides=${found[0].r.d} asides=${found[0].plain.asides})\n`);
+  return found[0];
 }
 
 // How many chapter files are there, counting up from 1 without a gap?
@@ -1704,6 +1971,17 @@ if (require.main === module) {
       levels.map(l => " " + JSON.stringify(l)).join(",\n") + "\n];\n");
     fs.writeFileSync(path.join(__dirname, "solutions.json"), JSON.stringify(solutions));
     process.stderr.write(`wrote ${levels.length} levels in ${count} chapters\n`);
+  } else if (arg === "swap" && isChapter(process.argv[3])) {
+    // do the swaps (see SWAPS) on the chapter file that is there
+    const num = Number(process.argv[3]), file = path.join(__dirname, `chapter-${num}.json`);
+    const ch = JSON.parse(fs.readFileSync(file, "utf8")), plan = chapterFor(num);
+    for (const swap of SWAPS[num] || []) {
+      const c = gentler(plan, num, swap, ch.levels[swap.slot - 1].best);
+      const { level, path: sol } = pack(c.lv, c.r, num, swap.slot);
+      if (swap.slot === 1 && plan.hint) { level.hint = plan.hint; level.guide = runsOf(sol); level.time = Math.max(level.time, 75); }
+      ch.levels[swap.slot - 1] = level; ch.solutions[swap.slot - 1] = sol;
+    }
+    fs.writeFileSync(file, JSON.stringify(ch));
   } else if (arg === "topup" && isChapter(process.argv[3])) {
     // A chapter came out short: add levels (second board size) just before its finale.
     const num = Number(process.argv[3]), file = path.join(__dirname, `chapter-${num}.json`);
@@ -1725,11 +2003,11 @@ if (require.main === module) {
     fs.writeFileSync(path.join(__dirname, `chapter-${arg}.json`), JSON.stringify(buildChapter(Number(arg))));
     process.stderr.write(`chapter ${arg} done\n`);
   } else {
-    process.stderr.write("usage: node tools/levels.js <chapter number> | topup <chapter number> | merge\n");
+    process.stderr.write("usage: node tools/levels.js <chapter number> | topup <chapter number> | swap <chapter number> | merge\n");
   }
 }
 module.exports = {
   solve, thinking, prepare, startState, occupancy, slide, DIRS, SHAPES,
-  compile, plainPlayer, solveFast, trapsOf, isLost, silentDeadEnds, extraTurns, thinkingFast, tidy, switchesOf,
+  compile, plainPlayer, solveFast, trapsOf, isLost, silentDeadEnds, fillOcc, moveMask, setBalls, ballsAfter: () => BALLS_AFTER, packBalls, unpackBalls, extraTurns, thinkingFast, tidy, switchesOf,
   randomLevel, candidate, reasons: () => why, timeFor, squeezeOf, chapterFor, climbOf, seasonOf, difficulty, chaptersOnDisk, PER_CHAPTER, setSeed,
 };
