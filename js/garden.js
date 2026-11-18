@@ -102,4 +102,14 @@ function drawGardenBase() {
   PATTERNS[roomPut("gground")](0, GROUND_Y, RW, RH - GROUND_Y);
 }
 
-ROOMS.push({ id: "garden", spots: GARDEN_SPOTS, wallY: GWALL_Y, base: drawGardenBase });
+// Its Style is the sky and the ground together (see ROOMS in js/room.js).
+ROOMS.push({ id: "garden", spots: GARDEN_SPOTS, wallY: GWALL_Y, base: drawGardenBase,
+  pieces: ["gsky", "gground"],
+  styles: [
+    { id: "g_sunny", put: ["gs_day", "gg_grass"] },          // free
+    { id: "g_clover", put: ["gs_day", "gg_clover"] },        // 500
+    { id: "g_sunset", put: ["gs_sunset", "gg_stone"] },      // 800 + 1400 = 2200
+    { id: "g_night", put: ["gs_night", "gg_clover"] },       // 2200 + 500 = 2700
+    { id: "g_rainbow", put: ["gs_rainbow", "gg_flowers"] },  // 4000 + 2600 = 6600
+  ],
+  decor: ["gfence", "glamp", "gtree", "gbird", "gflower", "gbench", "gpond", "ghammock", "gpot", "gtoy"] });

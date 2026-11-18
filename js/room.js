@@ -2,8 +2,13 @@
 /* ==================================================================
    DROP THE BEAN - room: her cats' own room, decorated with coins.
    One cozy room with 16 spots (the list is ROOM_SPOTS in core.js).
-   Tapping a spot opens a small picker for that spot. Things she owns
-   can be swapped freely; anything new goes through the "Buy?" card.
+   The room opens clean. The Decorate button shows the spots: a "+" on
+   an empty one, a soft outline on a filled one. Tapping a spot opens a
+   small picker for it. The wallpaper, floor and window view are chosen
+   together as one Style (each room's "styles" list). A few small spots share a
+   picker (the cat bed and cushion, the toy and bowl), so there are fewer
+   to look at. Things she owns can be swapped freely; anything new goes
+   through the "Buy?" card.
    Her own cat lives here, big, in front: she sits, naps, blinks and purrs.
    Everything is drawn in "room units": the room is 360 wide and 440
    tall, and the whole picture is scaled to fit the screen.
@@ -31,10 +36,15 @@ Object.assign(WORDS.en, {
   ri_d_basic: "Blue bowl", ri_d_double: "Two bowls", ri_d_gold: "Golden bowl",
   room_0: "Bedroom", room_1: "Kitchen", room_2: "Garden", room_locked: "The {0} opens after level {1}",
   gift_week: "Gift week", gift_from: "A gift from {0}!", gift_day: "Day {0} of 7", gift_big: "Day 7: a big gift!",
-  gift_coins: "+{0} coins", gift_pu: "1 {0}", gift_item: "For your room: {0}", gift_item_tip: "Tap its spot in the {0} to put it out.",
+  gift_coins: "+{0} coins", gift_pu: "1 {0}", gift_item: "For your room: {0}", gift_item_tip: "Tap Decorate in the {0} to put it out.",
   cal_title: "Gift week", cal_day: "Day {0}", cal_today: "Today", cal_next: "Tomorrow",
   cal_tip: "Win the Daily nap and your cat brings a gift.", cal_tip2: "Missed a day? Your week waits. Day 7 is a big one.",
   open_gift: "Tap the gift",
+  decorate: "Decorate", style: "Style", style_of: "{0} style", style_mix: "Now: your own mix",
+  rg_bed_cush: "Cat bed and cushion", rg_toy_bowl: "Toy and bowl",
+  st_b_cozy: "Cozy", st_b_rain: "Rainy day", st_b_sunset: "Pink sunset", st_b_night: "Starry night", st_b_spring: "Spring",
+  st_k_sunny: "Sunny", st_k_mint: "Mint", st_k_picnic: "Picnic", st_k_lemon: "Lemon", st_k_brick: "Warm brick",
+  st_g_sunny: "Sunny", st_g_clover: "Clover", st_g_sunset: "Sunset", st_g_night: "Starry night", st_g_rainbow: "Rainbow",
 });
 
 const RW = 360, RH = 440, WALL_Y = 290;
@@ -649,7 +659,50 @@ function drawThingPreview(spot, id, cx, cy, size) {
   ctx.restore();
 }
 
-ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase });
+/* Each room also lists:
+   pieces: the spots that make its Style (wall, floor and window view; sky and ground in the Garden).
+   styles: 5 matching sets, cheapest first. "put" names one existing thing for each piece, in the
+     same order, so things she already owns or has placed keep working. A style is hers when she owns
+     every piece (free pieces need no owning); buying it buys the pieces she does not have yet.
+   decor: the other spots, in the order they are listed. A list in a list is one picker for both. */
+ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase,
+  pieces: ["wall", "floor", "view"],
+  styles: [
+    { id: "b_cozy", put: ["w_plain", "f_wood", "v_day"] },           // free
+    { id: "b_rain", put: ["w_stripe", "f_tile", "v_rain"] },         // 300 + 250 + 400 = 950
+    { id: "b_sunset", put: ["w_dots", "f_check", "v_sunset"] },      // 650 + 700 + 1000 = 2350
+    { id: "b_night", put: ["w_fish", "f_carpet", "v_stars"] },       // 2400 + 1200 + 2200 = 5800
+    { id: "b_spring", put: ["w_flower", "f_bamboo", "v_rainbow"] },  // 1300 + 2000 + 4000 = 7300
+  ],
+  decor: ["pic", "shelf", "hang", "sill", "lamp", "plant", "tree", "rug", "post", ["bed", "cush"], ["toy", "bowl"]] });
+
+/* ---------- styles and decor spots: helpers for every room ---------- */
+const styleById = id => { for (const R of ROOMS) { const st = R.styles.find(q => q.id === id); if (st) return st; } return null; };
+const styleRoom = st => ROOMS.find(R => R.styles.includes(st)) || ROOMS[0];
+const isPiece = spot => ROOMS.some(R => R.pieces.includes(spot));
+// The style the room shows now, or null when its pieces are her own mix from before.
+const styleNow = R => R.styles.find(st => R.pieces.every((sp, i) => roomPut(sp) === st.put[i])) || null;
+const styleOwned = st => st.put.every(roomOwns);
+const styleCost = st => st.put.reduce((sum, id) => sum + (roomOwns(id) ? 0 : roomItem(id).price), 0);   // only the pieces she lacks
+// The picker groups of a room: first its Style, then each spot or pair of spots.
+function decorList(R) {
+  if (!R._decor) R._decor = [{ key: "style", style: true, spots: R.pieces }].concat(R.decor.map(d => ({ key: [].concat(d).join("_"), spots: [].concat(d) })));
+  return R._decor;
+}
+const decorOf = spot => { const R = ROOMS[roomOfSpot(spot)]; return decorList(R).find(d => d.spots.includes(spot)) || decorList(R)[0]; };
+// A small picture of a style: its wall above, its floor below, a little window with its view.
+function drawStyleSwatch(st, cx, cy, size) {
+  const R = styleRoom(st), k = size / 100, [wall, floor, view] = st.put;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k);
+  rr(-46, -46, 92, 92, 14); ctx.save(); ctx.clip();
+  PATTERNS[wall](-46, -46, 92, 64);
+  if (R.id === "garden") { oval(-30, 18, 40, 12); fs("#B7E3A0"); oval(26, 20, 44, 13); fs("#A8DB90"); }   // the far hills
+  PATTERNS[floor](-46, 18, 92, 28);
+  ctx.restore();
+  if (view) drawWindow(view, -2, -36, 40, 40);
+  rr(-46, -46, 92, 92, 14); fs(null, "#C9B8A6", 2.4);
+  ctx.restore();
+}
 
 /* ---------- her cat: big, the star of the room ----------
    Only her own cat lives in the room. She is drawn big, in front of the furniture, like the
@@ -728,17 +781,18 @@ function roomStroke(x, y) {
    One daily habit: winning today's Daily nap. Once she has, her cat holds a small present on
    the home screen; tapping it opens it. Each Daily nap won is one day of the gift week
    (markDaily in core.js counts it); day 7 is a bigger present. Missing a day takes nothing
-   away: the week just carries on from where she is. The Room has the gift week card. */
+   away: the week just carries on from where she is. The gift week card opens from Home. */
 const giftReady = () => dailyDone() && S.gift.last !== todayKey();
 const giftCatKey = () => S.hero;                              // her own cat brings it
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 // What is in the box. Days 1 to 6: usually coins (20 to 60), sometimes a powerup (22 in 100),
-// rarely a thing for a room she has opened and does not own yet, up to 1500 coins (8 in 100).
+// rarely a thing for a room she has opened and does not own yet, up to 1500 coins (8 in 100;
+// never a style piece: those come as a whole Style).
 // Day 7: 150 coins and a powerup, and 3 times in 10 also a room thing up to 3000 coins.
 function rollGift(day) {
   const out = { coins: 0, pu: "", item: "" };
   const pus = POWERUPS.filter(p => puOpen(p.id)).map(p => p.id);
-  const items = cap => ROOM_ITEMS.filter(it => it.price > 0 && it.price <= cap && !S.room.own.includes(it.id) && roomOpen(roomOfSpot(it.spot)));
+  const items = cap => ROOM_ITEMS.filter(it => it.price > 0 && it.price <= cap && !isPiece(it.spot) && !S.room.own.includes(it.id) && roomOpen(roomOfSpot(it.spot)));
   if (day === 7) {
     out.coins = 150; out.pu = pickOne(pus);
     if (Math.random() < 0.3) { const list = items(3000); if (list.length) out.item = pickOne(list).id; }
@@ -791,6 +845,7 @@ function drawRoomTabs(y) {
   });
 }
 let roomAt = { k: 1, ox: 0, oy: 0 };
+let decorating = false;                           // the Decorate button shows the spots; Done hides them again
 function drawRoomScreen() {
   const s = safeArea(), R = curRoom();
   coinPill(16, topY + 11);
@@ -799,10 +854,10 @@ function drawRoomScreen() {
   drawRoomTabs(topY + 52);
   const tb = tabTop(), top = topY + 104, bottom = tb - 66, availH = Math.max(60, bottom - top);
   const k = Math.max(0.2, Math.min((W - 20) / RW, availH / RH));
-  const ox = (W - RW * k) / 2, oy = top + Math.max(0, (availH - RH * k) * 0.3);
+  const ox = (W - RW * k) / 2, oy = top + Math.max(0, (availH - RH * k) * 0.5);
   roomAt = { k, ox, oy };
   if (!pet) pet = newPet();
-  const p = pet;
+  const p = pet, show = decorating && !overlay;
 
   // the room itself, in room units
   rr(ox - 5, oy - 5 + 6, RW * k + 10, RH * k + 10, 24); ctx.fillStyle = "rgba(20, 28, 90, 0.22)"; ctx.fill();
@@ -817,6 +872,19 @@ function drawRoomScreen() {
   for (const spot of R.spots) if (SPOT_AT[spot].layer === 2 && S.room.put[spot]) list.push({ depth: SPOT_AT[spot].depth, spot });
   list.sort((a, b) => a.depth - b.depth);
   for (const it of list) drawThing(it.spot, S.room.put[it.spot]);
+  // Decorating: each filled spot gets a soft outline (behind her, so none covers her face), and a
+  // spot or pair with nothing in it gets one "+".
+  const decor = decorList(R).filter(d => !d.style), empty = [];
+  if (show) for (const d of decor) {
+    const filled = d.spots.filter(sp => S.room.put[sp]);
+    if (!filled.length) { empty.push(d.spots[0]); continue; }
+    for (const sp of filled) {
+      const at = SPOT_AT[sp], [bx, by, bw, bh] = at.box;
+      rr(at.x + bx - 3, at.y + by - 3, bw + 6, bh + 6, 12);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.16)"; ctx.fill();
+      ctx.setLineDash([10, 7]); fs(null, "rgba(255, 255, 255, 0.92)", 3); ctx.setLineDash([]);
+    }
+  }
   // her, big, in front of it all
   const bt = time - p.blinkAt, blink = bt >= 0 && bt < 0.18 ? Math.sin(bt / 0.18 * Math.PI) : 0;
   const st = time - p.swishAt, wag = S.calm || st < 0 || st > 1.5 ? 0 : Math.sin(st * 6) * 0.13 * Math.sin(st / 1.5 * Math.PI);
@@ -830,11 +898,10 @@ function drawRoomScreen() {
     ctx.globalAlpha = 1;
   }
   for (const f of roomFx) { ctx.globalAlpha = clamp01(f.life / f.max); ctx.fillStyle = "#FF5C8A"; drawHeart(f.x, f.y, 22); ctx.globalAlpha = 1; }
-  // empty spots wear a small "+" so she knows they can be tapped. One that would sit on her
-  // moves out to her side, at the same height, so none is hidden and none covers her face.
+  // The "+" signs. One that would sit on her moves out to her side, at the same height, so none
+  // is hidden and none covers her face.
   const pluses = [], half = PET_S * (p.wake < 0.5 ? 0.4 : 0.31) + 16, petTop = PET_FEET - PET_S * (p.wake < 0.5 ? 0.6 : 0.92);
-  if (!overlay) for (const spot of R.spots) {
-    if (SWATCH[spot] || S.room.put[spot]) continue;
+  for (const spot of empty) {
     const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
     let mx = at.x + bx + bw / 2, my = at.y + by + bh / 2 + (at.plusY || 0);
     if (Math.abs(mx - p.x) < half && my > petTop) mx = Math.max(14, Math.min(RW - 14, p.x + (mx < p.x ? -half : half)));
@@ -852,8 +919,9 @@ function drawRoomScreen() {
   }
   ctx.restore();
 
-  // tapping: the spots first (the big wall and floor at the bottom), then her, then every "+" on top of her
-  for (const spot of R.spots) {
+  // Tapping. Not decorating: only her (she purrs); the furniture does nothing. Decorating: the
+  // spots first (the big wall and floor at the bottom open the Style), then her, then every "+".
+  if (show) for (const spot of R.spots) {
     const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
     buttons.push({ x: ox + (at.x + bx) * k, y: oy + (at.y + by) * k, w: bw * k, h: bh * k, onTap: () => openPicker(spot) });
   }
@@ -864,12 +932,21 @@ function drawRoomScreen() {
     buttons.push({ x: ox + mx * k - r, y: oy + my * k - r, w: r * 2, h: r * 2, onTap: () => openPicker(spot) });
   }
 
-  const bw = Math.min(170, (W - 32 - 10) / 2);
-  pillButton(W / 2 - bw - 5, tb - 56, bw, 46, t("gift_week"), () => { overlay = { kind: "calendar", t: 1, delay: 0, at: time }; }, false);
-  pillButton(W / 2 + 5, tb - 56, bw, 46, t("powerups"), () => openShop("room"), false);
+  // One calm button under the room: Decorate. While decorating: Style and Done, and a short tip.
+  const by = tb - 56, roomEnd = oy + RH * k + 5;
+  if (!decorating) {
+    const bw = Math.min(200, W - 64);
+    pillButton(W / 2 - bw / 2, by, bw, 46, t("decorate"), () => { decorating = true; }, false);
+    return;
+  }
+  if (by - roomEnd >= 24) fitLabel(t("room_tip"), W / 2, (roomEnd + by) / 2, 13, W - 40, SOFT, 700);
+  const bw = Math.min(150, (W - 32 - 10) / 2);
+  pillButton(W / 2 - bw - 5, by, bw, 46, t("style"), () => openPicker(R.pieces[0]), false);
+  pillButton(W / 2 + 5, by, bw, 46, t("done"), () => { decorating = false; }, true);
 }
 
-/* ---------- the picker for one spot ---------- */
+/* ---------- the picker for one spot, a pair of spots, or the Style ---------- */
+// Any spot can be asked for: a wall, floor or window view opens its room's Style picker.
 function openPicker(spot) { overlay = { kind: "roompick", spot, t: 1, delay: 0, at: time }; }
 function placeThing(spot, id) {
   if (id) S.room.put[spot] = id; else delete S.room.put[spot];
@@ -886,38 +963,66 @@ function pickThing(spot, id) {
     placeThing(spot, id);
   });
 }
+// Put a style's pieces in the room. Not hers yet: the "Buy?" card first, for the pieces she lacks.
+function useStyle(st) {
+  const R = styleRoom(st);
+  R.pieces.forEach((sp, i) => { S.room.put[sp] = st.put[i]; });
+  save();
+  overlay = null;
+  sfx.place();
+}
+function pickStyle(st) {
+  if (styleOwned(st)) { useStyle(st); return; }
+  askBuy({ name: t("style_of", t("st_" + st.id)), price: styleCost(st), pic: ["style", st.id] }, () => {
+    for (const id of st.put) if (roomItem(id).price > 0 && !S.room.own.includes(id)) S.room.own.push(id);
+    useStyle(st);
+  });
+}
 function drawRoomPick() {
-  const o = overlay, spot = o.spot;
+  const o = overlay, d = decorOf(o.spot), R = ROOMS[roomOfSpot(o.spot)];
   buttons = [];                                                         // nothing behind the card can be tapped
   ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
-  const items = (ROOM_FREE[spot] ? [] : [""]).concat(ROOM_ITEMS.filter(it => it.spot === spot).map(it => it.id));
-  const cw = Math.max(220, Math.min(340, W - 32)), colsN = 3, gap = 8;
-  const rowsN = Math.ceil(items.length / colsN);
-  const roomForTiles = H - topY - 12 - 66 - 74 - (rowsN - 1) * gap;            // title above, Done below
-  const tw = Math.max(52, Math.min((cw - 32 - gap * (colsN - 1)) / colsN, roomForTiles / rowsN));
-  const ch = 66 + rowsN * tw + (rowsN - 1) * gap + 74;
+  // one section of tiles for each spot (a pair has a small title over each), or the styles
+  const now = d.style ? styleNow(R) : null;
+  const sections = d.style ? [{ spot: "", title: "", ids: R.styles.map(st => st.id) }]
+    : d.spots.map(sp => ({ spot: sp, title: d.spots.length > 1 ? t("rs_" + sp) : "", ids: [""].concat(ROOM_ITEMS.filter(it => it.spot === sp).map(it => it.id)) }));
+  const cw = Math.max(220, Math.min(340, W - 32)), colsN = d.spots.length > 1 && !d.style ? 4 : 3, gap = 8;
+  const rowsOf = sec => Math.ceil(sec.ids.length / colsN), rowsN = sections.reduce((n, sec) => n + rowsOf(sec), 0);
+  const heads = sections.filter(sec => sec.title).length * 22 + (d.style && !now ? 20 : 0);
+  const roomForTiles = H - topY - 12 - 66 - 74 - heads - (rowsN - 1) * gap;     // title above, Done below
+  const tw = Math.max(44, Math.min((cw - 32 - gap * (colsN - 1)) / colsN, roomForTiles / rowsN));
+  const ch = 66 + heads + rowsN * tw + (rowsN - 1) * gap + 74;
   const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
   card(x, y, cw, ch);
-  fitLabel(t("rs_" + spot), W / 2, y + 36, 22, cw - 36, INK, 900);
-  const gw = colsN * tw + (colsN - 1) * gap, gx0 = (W - gw) / 2, now = roomPut(spot);
-  items.forEach((id, i) => {
-    const tx = gx0 + (i % colsN) * (tw + gap), ty = y + 62 + Math.floor(i / colsN) * (tw + gap);
-    const on = id === now, owned = !id || roomOwns(id);
-    rr(tx, ty, tw, tw, 14); ctx.fillStyle = on ? "#FFF0B3" : "#F1F5FF"; ctx.fill();
-    if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
-    if (id) drawThingPreview(spot, id, tx + tw / 2, ty + tw * 0.42, tw * 0.62);
-    else label(t("no_hat"), tx + tw / 2, ty + tw * 0.42, Math.round(Math.max(11, tw * 0.17)), SOFT, 800);
-    const ly = ty + tw - 11;
-    if (owned) fitLabel(id ? t("ri_" + id) : t("room_none"), tx + tw / 2, ly, 11, tw - 8, INK, 700);
-    else {                                                              // not hers yet: the price
-      const num = String(roomItem(id).price);
-      ctx.font = `800 12px ${FONT}`;
-      const left = tx + tw / 2 - (ctx.measureText(num).width + 16) / 2;
-      drawCoin(left + 6, ly - 1, 6.5);
-      label(num, left + 16, ly, 12, INK, 800, "left");
-    }
-    buttons.push({ x: tx, y: ty, w: tw, h: tw, onTap: () => pickThing(spot, id) });
-  });
+  fitLabel(d.style ? t("style") : d.spots.length > 1 ? t("rg_" + d.key) : t("rs_" + d.spots[0]), W / 2, y + 36, 22, cw - 36, INK, 900);
+  const gw = colsN * tw + (colsN - 1) * gap, gx0 = (W - gw) / 2;
+  let ty0 = y + 62;
+  if (d.style && !now) { fitLabel(t("style_mix"), W / 2, ty0 + 4, 12, cw - 36, SOFT, 700); ty0 += 20; }   // her old pieces don't make a style
+  for (const sec of sections) {
+    if (sec.title) { label(sec.title, gx0 + 2, ty0 + 8, 13, SOFT, 800, "left"); ty0 += 22; }
+    const cur = sec.spot ? S.room.put[sec.spot] || "" : now ? now.id : null;
+    sec.ids.forEach((id, i) => {
+      const tx = gx0 + (i % colsN) * (tw + gap), ty = ty0 + Math.floor(i / colsN) * (tw + gap);
+      const st = d.style ? styleById(id) : null, on = id === cur;
+      const owned = st ? styleOwned(st) : !id || roomOwns(id);
+      rr(tx, ty, tw, tw, 14); ctx.fillStyle = on ? "#FFF0B3" : "#F1F5FF"; ctx.fill();
+      if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
+      if (st) drawStyleSwatch(st, tx + tw / 2, ty + tw * 0.42, tw * 0.62);
+      else if (id) drawThingPreview(sec.spot, id, tx + tw / 2, ty + tw * 0.42, tw * 0.62);
+      else label(t("no_hat"), tx + tw / 2, ty + tw * 0.42, Math.round(Math.max(11, tw * 0.17)), SOFT, 800);
+      const ly = ty + tw - 11;
+      if (owned) fitLabel(st ? t("st_" + id) : id ? t("ri_" + id) : t("room_none"), tx + tw / 2, ly, 11, tw - 8, INK, 700);
+      else {                                                            // not hers yet: the price (a style: the pieces she lacks)
+        const num = String(st ? styleCost(st) : roomItem(id).price);
+        ctx.font = `800 12px ${FONT}`;
+        const left = tx + tw / 2 - (ctx.measureText(num).width + 16) / 2;
+        drawCoin(left + 6, ly - 1, 6.5);
+        label(num, left + 16, ly, 12, INK, 800, "left");
+      }
+      buttons.push({ x: tx, y: ty, w: tw, h: tw, onTap: () => (st ? pickStyle(st) : pickThing(sec.spot, id)) });
+    });
+    ty0 += rowsOf(sec) * (tw + gap);
+  }
   pillButton(x + 24, y + ch - 62, cw - 48, 46, t("done"), () => { overlay = null; }, true);
   if (time - o.at < 0.25) buttons = [];                                 // the tap that opened it can't also choose
 }

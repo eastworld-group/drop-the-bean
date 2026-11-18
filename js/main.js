@@ -34,6 +34,7 @@ cv.addEventListener("pointerdown", e => {
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
   if (overlay) return;
   if (screen === "chapters") { chapDrag = { y0: e.clientY, s0: chapScroll, y: e.clientY, t: time }; chapVel = 0; }
+  if (screen === "mycat") rowDrag = rowAt(e.clientX, e.clientY);     // a row of cats or outfits can slide sideways
   if (screen === "game" && !aim) {                    // while she is aiming a powerup, a touch picks its target instead of sliding a bed
     const b = bedAtPoint(e.clientX, e.clientY);
     if (b) {
@@ -50,6 +51,7 @@ cv.addEventListener("pointermove", e => {
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press.moved = true;
   if (drag && !overlay) dragTo(e.clientX, e.clientY);
   if (screen === "room") roomStroke(e.clientX, e.clientY);          // stroking her cat in My room
+  if (rowDrag && press.moved) dragRow(e.clientX);                     // sliding a row in My cat
   if (chapDrag && press.moved) {                      // dragging the chapter list
     const dt = Math.max(1 / 120, time - chapDrag.t);
     chapVel = lerp(chapVel, -(e.clientY - chapDrag.y) / dt, 0.5);
@@ -60,7 +62,7 @@ cv.addEventListener("pointermove", e => {
 function release() {
   wakeSound();                                        // an iPhone only lets sound start as a finger lifts
   if (drag && beds.includes(drag.bed)) { drag.bed.dropT = time; sfx.drop(); }   // put down: a little squish and a soft thud
-  drag = null;
+  drag = null; rowDrag = null;
   if (chapDrag) { if (!press || !press.moved || time - chapDrag.t > 0.12) chapVel = 0; chapDrag = null; }
   if (press && !press.moved) {
     const wasAim = aim;
@@ -78,7 +80,7 @@ function release() {
   press = null;
 }
 cv.addEventListener("pointerup", e => { if (ours(e)) release(); });
-cv.addEventListener("pointercancel", e => { if (ours(e)) { drag = null; press = null; chapDrag = null; } });
+cv.addEventListener("pointercancel", e => { if (ours(e)) { drag = null; press = null; chapDrag = null; rowDrag = null; } });
 
 // The cat's name is typed into a real text box, so the phone keyboard works.
 nameInput.addEventListener("input", () => {
@@ -152,6 +154,8 @@ function placeBox(el, box) {
 }
 function render() {
   buttons = [];
+  if (screen !== "mycat") myCatFresh = true;          // next time My cat opens, its rows show her cat and her outfit
+  if (screen !== "room") decorating = false;          // the room opens clean, not in decorate mode
   drawBackground();
   if (screen === "home") drawHome();
   else if (screen === "game") drawGame();

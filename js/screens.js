@@ -179,6 +179,14 @@ function drawHome() {
   fitLabel(ready ? t("daily") : t("daily_done"), px, py + ps * 0.3 + 12, 13, 96, INK, 800);
   if (streak && !small) fitLabel(t("streak", streak), px, py + ps * 0.3 + 28, 13, 96, SOFT, 700);
   buttons.push({ x: px - 44, y: py - ps * 0.5, w: 88, h: ps + 30, onTap: () => startLevel(dailyIndex(), true) });
+  // the gift week: a small present at the bottom right of the stage, the pillow's partner.
+  // Tapping it shows the week (one day for each Daily nap won; day 7 is a big one).
+  const wx = W - 16 - 46, wr = ps * 0.36;
+  ctx.fillStyle = "rgba(20, 28, 90, 0.16)"; oval(wx, py + 3, wr, wr); ctx.fill();
+  ctx.fillStyle = "#FFF3D6"; oval(wx, py, wr, wr); ctx.fill(); ctx.strokeStyle = "#E0B866"; ctx.lineWidth = 2; ctx.stroke();
+  drawPresent(wx, py + wr * 0.5, wr * 0.9, false);
+  fitLabel(t("gift_week"), wx, py + ps * 0.3 + 12, 13, 84, INK, 800);
+  buttons.push({ x: wx - 36, y: py - ps * 0.5, w: 72, h: ps + 30, onTap: () => { overlay = { kind: "calendar", t: 1, delay: 0, at: time }; } });
 
   // the chapter she is in, with a thin bar: tapping it opens the Levels tab
   const ch = pageOf(next), from = ch * CHAPTER_SIZE, done = LEVELS.slice(from, from + CHAPTER_SIZE).filter((_, i) => S.stars[from + i]).length;
@@ -273,12 +281,29 @@ function drawLevels(next, y0, y1) {
 }
 
 /* ==================================================================
-   MY CAT: choose her, name her, dress her.
-   Three tabs share the space under the big cat: Cats, Hats, Neck.
+   MY CAT: choose her, name her, dress her. One page, no tabs: her cat
+   big at the top, her cat's name, then one row of cats and one row of
+   outfits (hats and neck things together). A row too long for the screen
+   slides sideways under a finger (main.js), or with its little arrows.
 =================================================================== */
-let nameBox = null, catTab = "cats";
+let nameBox = null, catTab = "cats";             // catTab: the page has no tabs any more; kept for old callers
 // A hat or neck thing she does not own yet: the first tap tries it on the big cat, the second asks to buy it.
 let tryOn = null;
+const OUTFITS = HATS.map(h => ({ slot: "hat", id: h.id, price: h.price })).concat(NECKS.map(q => ({ slot: "neck", id: q.id, price: q.price })));
+const rowScroll = { cats: 0, outfits: 0 };      // how far each row has slid to the left, in pixels
+const myRows = {};                               // where each row is on screen, for dragging it (main.js)
+let rowDrag = null, myCatFresh = true;           // myCatFresh: the page was just opened (main.js sets it)
+function rowAt(x, y) {
+  for (const key of Object.keys(myRows)) {
+    const r = myRows[key];
+    if (r.max > 0 && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return { key, x0: x, s0: rowScroll[key] };
+  }
+  return null;
+}
+function dragRow(x) {
+  if (!rowDrag || !myRows[rowDrag.key]) return;
+  rowScroll[rowDrag.key] = Math.max(0, Math.min(myRows[rowDrag.key].max, rowDrag.s0 - (x - rowDrag.x0)));
+}
 function pickCat(k) {
   if (!catOpen(k)) { toast(t("cat_locked", CATS[k].name, CAT_STARS[k])); sfx.no(); return; }     // not enough stars yet
   S.hero = k; save();
@@ -286,109 +311,122 @@ function pickCat(k) {
   nameInput.placeholder = CATS[k].name;
   sfx.meow(0, VOICE[k]);
 }
-// Put on something she owns, take it off (id ""), or ask whether to buy it.
+// Put on something she owns, take off the one she wears (tap it again), or try on and then buy.
 function pickWear(slot, id) {
-  const hat = slot === "hat", owned = hat ? S.hats : S.necks;
-  const wear = () => { if (hat) S.hat = id; else S.neck = id; save(); };
-  if (!id || owned.includes(id)) { tryOn = null; wear(); return; }
-  if (!tryOn || tryOn.slot !== slot || tryOn.id !== id) { tryOn = { slot, id }; sfx.peek(); return; }   // the line under the grid says: tap again to buy
+  const hat = slot === "hat", owned = hat ? S.hats : S.necks, worn = hat ? S.hat : S.neck;
+  const wear = v => { if (hat) S.hat = v; else S.neck = v; save(); };
+  if (!id || id === worn) { tryOn = null; wear(""); return; }
+  if (owned.includes(id)) { tryOn = null; wear(id); return; }
+  if (!tryOn || tryOn.slot !== slot || tryOn.id !== id) { tryOn = { slot, id }; sfx.peek(); return; }   // the line under the rows says: tap again to buy
   const name = t((hat ? "hat_" : "neck_") + id), price = (hat ? HATS : NECKS).find(q => q.id === id).price;
-  askBuy({ name, price, pic: [slot, id] }, () => { owned.push(id); tryOn = null; wear(); });
+  askBuy({ name, price, pic: [slot, id] }, () => { if (!owned.includes(id)) owned.push(id); tryOn = null; wear(id); });
 }
 const pickHat = id => pickWear("hat", id);
+
+// One row of cells, "cw" wide each. Too many to fit: the row slides, a soft arrow shows at each
+// end that has more, and tapping an arrow slides one screenful. cell(i, cx, y) draws cell i
+// centred on cx and returns what a tap on it does. "focus": the cell to show when the page opens.
+function drawRow(key, n, focus, y, cw, ch, cell) {
+  const x0 = 12, w = Math.max(40, W - 24), total = n * cw, max = Math.max(0, total - w);
+  if (myCatFresh) rowScroll[key] = focus * cw + cw / 2 - w / 2;
+  rowScroll[key] = Math.max(0, Math.min(max, rowScroll[key] || 0));
+  const left = max > 0 ? x0 - rowScroll[key] : x0 + (w - total) / 2;
+  myRows[key] = { x: x0, y, w, h: ch, max };
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, y - 4, w, ch + 10); ctx.clip();
+  for (let i = 0; i < n; i++) {
+    const cx = left + i * cw;
+    if (cx + cw < x0 || cx > x0 + w) continue;
+    const tap = cell(i, cx + cw / 2, y);
+    const l = Math.max(x0, cx), r = Math.min(x0 + w, cx + cw);
+    if (r - l > 6) buttons.push({ x: l, y, w: r - l, h: ch + 4, onTap: tap });
+  }
+  ctx.restore();
+  if (!max) return;
+  const page = Math.max(cw, w - cw);
+  for (const d of [-1, 1]) {
+    if (d < 0 ? rowScroll[key] <= 1 : rowScroll[key] >= max - 1) continue;
+    const ax = d < 0 ? x0 + 14 : x0 + w - 14, ay = y + ch / 2;
+    ctx.fillStyle = "rgba(20, 28, 90, 0.14)"; oval(ax, ay + 2, 14, 14); ctx.fill();
+    ctx.fillStyle = "#FFFFFF"; oval(ax, ay, 14, 14); ctx.fill();
+    ctx.strokeStyle = SOFT; ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(ax - d * 2.5, ay - 5.5); ctx.lineTo(ax + d * 3, ay); ctx.lineTo(ax - d * 2.5, ay + 5.5); ctx.stroke();
+    buttons.push({ x: d < 0 ? x0 : x0 + w - 30, y, w: 30, h: ch + 4,
+      onTap: () => { rowScroll[key] = Math.max(0, Math.min(max, rowScroll[key] + d * page)); } });
+  }
+}
+// The box behind one cell: warm when chosen, a dashed ring while trying on, pale when locked.
+function cellBox(cx, y, cw, ch, on, trying, locked) {
+  rr(cx - cw / 2 + 3, y, cw - 6, ch, 14);
+  ctx.fillStyle = on || trying ? "#FFF0B3" : locked ? "rgba(255, 255, 255, 0.5)" : "#FFFFFF"; ctx.fill();
+  if (on || trying) { ctx.strokeStyle = trying ? "#E0A23A" : "#FF8A1F"; ctx.lineWidth = 3; ctx.setLineDash(trying ? [5, 4] : []); ctx.stroke(); ctx.setLineDash([]); }
+}
+// What it takes, under a cell: stars for a cat, coins for an outfit.
+function cellPrice(cx, ly, num, star) {
+  ctx.font = `800 11px ${FONT}`;
+  const left = cx - (ctx.measureText(num).width + 16) / 2;
+  if (star) drawStar(left + 6, ly - 1, 6, true); else drawCoin(left + 6, ly - 1, 6);
+  label(num, left + 16, ly, 11, INK, 800, "left");
+}
 
 function drawMyCat() {
   const s = safeArea(), setup = !S.setup;
   if (!setup) { coinPill(16, topY + 11); buttons.push({ x: 16, y: topY + 9, w: 86, h: 40, onTap: () => openShop("mycat") }); }
   label(setup ? t("pick_cat") : t("mycat"), W / 2, topY + 28, 26, INK, 900);
-  if (catTab === "cats") tryOn = null;
 
-  // Everything sits between the title and the Done button. The big cat takes
+  // Everything sits between the title and the tab bar (or the Start button). The big cat takes
   // whatever room is left, and no size can drop below its smallest value.
-  const top = topY + 56 + (H >= 700 ? 26 : 8), bottom = setup ? H - s.b - 76 : tabTop() - 10, room = bottom - top;   // headroom for a tall hat
-  const roomy = room >= 380;                                 // short screens drop the two lines of small text
-  const fixed = 58 + (roomy ? 42 : 0) + 46 + 50;
-  const ps = Math.max(56, Math.min(210, W * 0.56, room - fixed - 2 * 78));      // her cat, big: a live preview
-  const cellH = Math.max(40, Math.min(72, (room - fixed - ps) / 2 - 6));
-  let y = top + Math.max(0, Math.min(26, (room - fixed - ps - 2 * (cellH + 6)) / 2));
+  const top = topY + 56 + (H >= 700 ? 18 : 4), bottom = setup ? H - s.b - 76 : tabTop() - 8, room = Math.max(0, bottom - top);
+  const tight = room < 300;
+  const cw = Math.max(54, Math.min(72, (W - 24) / 5.4));            // five and a bit show, so a longer row looks like it goes on
+  const cellH = Math.max(tight ? 44 : 50, Math.min(80, room * 0.13)), head = tight ? 18 : 22, gap = tight ? 6 : 10;
+  const tipH = room >= 420 ? 24 : 0, bioH = room >= 520 ? 22 : 0;
+  const fixed = 50 + bioH + 2 * (head + cellH + gap) + tipH;
+  const ps = Math.max(56, Math.min(230, W * 0.6, room - fixed - 8));   // her cat, big: a live preview
+  const spare = Math.max(0, room - fixed - ps), more = Math.min(14, spare * 0.12);   // a tall phone spreads things out a little
+  let y = top + Math.min(30, spare * 0.25);
 
   cushion(W / 2, y + ps * 0.68, ps, ["#C9667F", "#F6A9C0", "#FFE1EA"]);
   const tryHat = tryOn && tryOn.slot === "hat" ? tryOn.id : S.hat, tryNeck = tryOn && tryOn.slot === "neck" ? tryOn.id : S.neck;
   drawCat(W / 2, y + ps * 0.48, ps, S.hero, { wake: 1, hat: tryHat, neck: tryNeck, noShadow: true, seed: 3, still: true, breath: S.calm ? 0 : 1 });
   y += ps + 8;
 
-  // the name is a real text box placed over the canvas (see main.js)
+  // her cat's name: a real text box placed over the canvas (see main.js)
   nameBox = { x: W / 2 - 105, y, w: 210, h: 42 };
   y += 50;
-  if (roomy) {
-    label(t("name_cat"), W / 2, y + 8, 12, INK, 700);
-    fitLabel(t("b_" + S.hero), W / 2, y + 28, 14, W - 40, INK, 700);
-    y += 42;
-  }
+  if (bioH) { fitLabel(t("b_" + S.hero), W / 2, y + 6, 13, W - 40, SOFT, 700); y += bioH; }
+  y += more;
 
-  // tabs
-  y += 6;
-  const tabs = ["cats", "hats", "neck"], tw = Math.max(40, Math.min(104, (W - 32 - 16) / 3));
-  tabs.forEach((id, i) => {
-    const x = W / 2 + (i - 1) * (tw + 8) - tw / 2;
-    pillButton(x, y, tw, 40, t("tab_" + id), () => { catTab = id; }, catTab === id, { fill: "#FFFFFF", text: 0.38 });
+  // the cats: her own shows the name she gave it, the others their own names
+  label(t("tab_cats"), 20, y + head / 2 - 1, 15, INK, 800, "left");
+  y += head;
+  drawRow("cats", HEROES.length, Math.max(0, HEROES.indexOf(S.hero)), y, cw, cellH, (i, cx, yy) => {
+    const k = HEROES[i], on = k === S.hero, locked = !catOpen(k), ly = yy + cellH - 9;
+    cellBox(cx, yy, cw, cellH, on, false, locked);
+    ctx.globalAlpha = locked ? 0.5 : 1;
+    drawCat(cx, yy + cellH * 0.42, Math.min(cw * 0.62, cellH * 0.54) * 1.1, k, { seed: i * 1.7, wake: on ? 1 : 0, still: true, noShadow: true });
+    ctx.globalAlpha = 1;
+    if (locked) cellPrice(cx, ly, String(CAT_STARS[k]), true); else fitLabel(catName(k), cx, ly, 10, cw - 8, INK, 700);
+    return () => pickCat(k);
   });
-  y += 52;
+  y += cellH + gap + more;
 
-  // the grid for this tab: five across
-  const items = catTab === "cats" ? HEROES.map(id => ({ id })) : [{ id: "" }].concat(catTab === "hats" ? HATS : NECKS);
-  const cw = Math.max(36, Math.min(68, (W - 20) / 5)), have = totalStars();
-  items.forEach((it, i) => {
-    const row = Math.floor(i / 5), inRow = Math.min(5, items.length - row * 5);
-    const x = W / 2 + (i % 5 - (inRow - 1) / 2) * cw, yy = y + row * (cellH + 6);
-    let on, tap, text, locked = false, price = 0;
-    if (catTab === "cats") {
-      on = it.id === S.hero; locked = !catOpen(it.id);
-      text = CATS[it.id].name; tap = () => pickCat(it.id);
-    } else {
-      const hat = catTab === "hats", owned = !it.id || (hat ? S.hats : S.necks).includes(it.id);
-      on = (hat ? S.hat : S.neck) === it.id;
-      text = it.id ? t((hat ? "hat_" : "neck_") + it.id) : t("no_hat");
-      if (!owned) price = it.price;
-      tap = () => pickWear(hat ? "hat" : "neck", it.id);
-    }
-    const trying = !!tryOn && catTab !== "cats" && tryOn.id === it.id && tryOn.slot === (catTab === "hats" ? "hat" : "neck");
-    rr(x - cw / 2 + 3, yy, cw - 6, cellH, 14);
-    ctx.fillStyle = on || trying ? "#FFF0B3" : locked ? "rgba(255, 255, 255, 0.5)" : "#FFFFFF"; ctx.fill();
-    if (on || trying) { ctx.strokeStyle = trying ? "#E0A23A" : "#FF8A1F"; ctx.lineWidth = 3; ctx.setLineDash(trying ? [5, 4] : []); ctx.stroke(); ctx.setLineDash([]); }
-    const cs = Math.min(cw * 0.62, cellH * 0.54), ly = yy + cellH - 9;
-    if (catTab === "cats") {
-      ctx.globalAlpha = locked ? 0.5 : 1;
-      drawCat(x, yy + cellH * 0.42, cs * 1.1, it.id, { seed: i * 1.7, wake: on ? 1 : 0, still: true, noShadow: true });
-      ctx.globalAlpha = 1;
-    } else {
-      drawCat(x, yy + cellH * 0.55, cs, S.hero, { wake: 1, still: true, noShadow: true, seed: 5,
-        hat: catTab === "hats" ? it.id : "", neck: catTab === "neck" ? it.id : "" });
-    }
-    if (locked || price) {                                    // what it takes: stars for a cat, coins for an outfit
-      const num = String(locked ? CAT_STARS[it.id] : price);
-      ctx.font = `800 11px ${FONT}`;
-      const left = x - (ctx.measureText(num).width + 16) / 2;
-      if (locked) drawStar(left + 6, ly - 1, 6, true); else drawCoin(left + 6, ly - 1, 6);
-      label(num, left + 16, ly, 11, INK, 800, "left");
-    } else fitLabel(text, x, ly, 10, cw - 8, INK, 700);
-    buttons.push({ x: x - cw / 2, y: yy, w: cw, h: cellH + 4, onTap: tap });
+  // the outfits: hats first, then neck things. One of each can be worn together.
+  label(t("outfits"), 20, y + head / 2 - 1, 15, INK, 800, "left");
+  y += head;
+  const wornAt = Math.max(0, OUTFITS.findIndex(q => q.id === (S.hat || S.neck)));
+  drawRow("outfits", OUTFITS.length, wornAt, y, cw, cellH, (i, cx, yy) => {
+    const q = OUTFITS[i], hat = q.slot === "hat", ly = yy + cellH - 9;
+    const on = (hat ? S.hat : S.neck) === q.id, owned = (hat ? S.hats : S.necks).includes(q.id);
+    const trying = !!tryOn && tryOn.slot === q.slot && tryOn.id === q.id;
+    cellBox(cx, yy, cw, cellH, on, trying, false);
+    drawCat(cx, yy + cellH * 0.55, Math.min(cw * 0.62, cellH * 0.54), S.hero, { wake: 1, still: true, noShadow: true, seed: 5,
+      hat: hat ? q.id : "", neck: hat ? "" : q.id });
+    if (owned) fitLabel(t((hat ? "hat_" : "neck_") + q.id), cx, ly, 10, cw - 8, INK, 700); else cellPrice(cx, ly, String(q.price), false);
+    return () => pickWear(q.slot, q.id);
   });
-  y += 2 * (cellH + 6) + 4;
-
-  // under the grid: how far the next cat is, or a short tip
-  if (catTab === "cats") {
-    const next = nextCat();
-    if (!next) label(t("all_cats"), W / 2, y + 12, 14, INK, 800);
-    else {
-      const need = CAT_STARS[next], bw = Math.max(60, Math.min(240, W - 80)), bx = W / 2 - bw / 2;
-      fitLabel(t("next_cat", CATS[next].name, need), W / 2, y + 8, 14, W - 32, INK, 800);
-      rr(bx, y + 20, bw, 12, 6); ctx.fillStyle = "#FFFFFF"; ctx.fill();
-      rr(bx, y + 20, Math.max(12, bw * clamp01(have / need)), 12, 6); ctx.fillStyle = "#FFD23F"; ctx.fill();
-      rr(bx, y + 20, bw, 12, 6); ctx.strokeStyle = "#D9920C"; ctx.lineWidth = 1.5; ctx.stroke();
-      label(t("stars_of", have, need), W / 2, y + 43, 11, INK, 700);
-    }
-  } else label(t("wear_tip"), W / 2, y + 12, 13, INK, 700);
+  y += cellH + 4;
+  if (tipH) fitLabel(tryOn ? t("buy_tip") : t("wear_tip"), W / 2, y + 12, 13, W - 32, SOFT, 700);
+  myCatFresh = false;
 
   // the first visit has a Start button; after that the tab bar takes you anywhere
   if (setup) pillButton(W / 2 - 120, H - s.b - 66, 240, 50, t("start"), () => { S.setup = true; save(); go("home"); }, true);
@@ -572,7 +610,7 @@ function drawShop() {
 
   // hats and neckwear live with the cat
   y += 10;
-  pillButton(rx, y, rw, 44, t("shop_outfits"), () => { catTab = "hats"; go("mycat"); }, false, { fill: "#FFFFFF", text: 0.36 });
+  pillButton(rx, y, rw, 44, t("shop_outfits"), () => { rowScroll.outfits = 0; go("mycat"); myCatFresh = false; }, false, { fill: "#FFFFFF", text: 0.36 });
 }
 
 /* ==================================================================
@@ -1132,6 +1170,7 @@ function drawBuy() {
   ctx.fillStyle = "#EEF3FF"; oval(W / 2, py, 46, 46); ctx.fill();
   if (kind === "pu") drawIcon(PU_ICON[id][0], W / 2, py, 2, PU_ICON[id][1]);
   else if (kind === "room") drawThingPreview(roomItem(id).spot, id, W / 2, py, 72);
+  else if (kind === "style") drawStyleSwatch(styleById(id), W / 2, py, 72);
   else drawCat(W / 2, py + 12, 58, S.hero, { wake: 1, still: true, noShadow: true, seed: 5,
     hat: kind === "hat" ? id : S.hat, neck: kind === "neck" ? id : S.neck });
   // the price, and the coins she has

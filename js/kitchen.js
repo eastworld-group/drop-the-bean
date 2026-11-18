@@ -120,4 +120,14 @@ function drawKitchenBase() {
   rr(sh.x - 46, sh.y, 92, 9, 3); fs("#C98E58", "#8A5A2E", 2.4);
 }
 
-ROOMS.push({ id: "kitchen", spots: KITCHEN_SPOTS, wallY: KWALL_Y, base: drawKitchenBase });
+// Its Style is the wall, floor and window view together (see ROOMS in js/room.js).
+ROOMS.push({ id: "kitchen", spots: KITCHEN_SPOTS, wallY: KWALL_Y, base: drawKitchenBase,
+  pieces: ["kwall", "kfloor", "kview"],
+  styles: [
+    { id: "k_sunny", put: ["kw_cream", "kf_tile", "kv_day"] },       // free
+    { id: "k_mint", put: ["kw_mint", "kf_wood", "kv_rain"] },        // 300 + 400 + 500 = 1200
+    { id: "k_picnic", put: ["kw_check", "kf_wood", "kv_day"] },      // 1800 + 400 = 2200
+    { id: "k_lemon", put: ["kw_lemon", "kf_check", "kv_sunset"] },   // 900 + 1100 + 1200 = 3200
+    { id: "k_brick", put: ["kw_brick", "kf_terra", "kv_snow"] },     // 3200 + 2400 + 3000 = 8600
+  ],
+  decor: ["kclock", "kshelf", "kpans", "kfridge", "kcounter", "kstove", "ktable", "krug", "kbowl"] });
