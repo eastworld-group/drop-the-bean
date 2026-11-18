@@ -290,13 +290,13 @@ let nameBox = null, catTab = "cats";             // catTab: the page has no tabs
 // A hat or neck thing she does not own yet: the first tap tries it on the big cat, the second asks to buy it.
 let tryOn = null;
 const OUTFITS = HATS.map(h => ({ slot: "hat", id: h.id, price: h.price })).concat(NECKS.map(q => ({ slot: "neck", id: q.id, price: q.price })));
-const rowScroll = { cats: 0, outfits: 0 };      // how far each row has slid to the left, in pixels
+const rowScroll = { cats: 0, outfits: 0, decor: 0, pick: 0 };   // how far each row has slid to the left, in pixels (decor and pick: My room)
 const myRows = {};                               // where each row is on screen, for dragging it (main.js)
 let rowDrag = null, myCatFresh = true;           // myCatFresh: the page was just opened (main.js sets it)
-function rowAt(x, y) {
-  for (const key of Object.keys(myRows)) {
+function rowAt(x, y, keys) {
+  for (const key of keys || Object.keys(myRows)) {
     const r = myRows[key];
-    if (r.max > 0 && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return { key, x0: x, s0: rowScroll[key] };
+    if (r && r.max > 0 && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return { key, x0: x, s0: rowScroll[key] };
   }
   return null;
 }
@@ -341,8 +341,12 @@ function drawRow(key, n, focus, y, cw, ch, cell) {
     if (r - l > 6) buttons.push({ x: l, y, w: r - l, h: ch + 4, onTap: tap });
   }
   ctx.restore();
+  rowArrows(key, x0, y, w, ch, Math.max(cw, w - cw));
+}
+// The soft arrows at the ends of a sliding row that has more to see. Tapping one slides by "page".
+function rowArrows(key, x0, y, w, ch, page) {
+  const max = myRows[key] ? myRows[key].max : 0;
   if (!max) return;
-  const page = Math.max(cw, w - cw);
   for (const d of [-1, 1]) {
     if (d < 0 ? rowScroll[key] <= 1 : rowScroll[key] >= max - 1) continue;
     const ax = d < 0 ? x0 + 14 : x0 + w - 14, ay = y + ch / 2;

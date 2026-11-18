@@ -26,13 +26,13 @@ Object.assign(THINGS, {
   /* shelf: things standing on the board (0 is the board's top) */
   ksh_jars: () => { jar(-26, 20, 28, "#FFB066", "#E07A5F"); jar(0, 22, 36, "#C9A27A", "#D9A86C"); jar(26, 18, 24, "#8FD67A", "#5AA9FF"); },
   ksh_plates: () => {
-    for (const [x, r, f, d] of [[-24, 18, "#FFFFFF", "#9AA7C9"], [-6, 20, "#BFE6FF", "#3B8BEF"], [14, 18, "#FFD3E0", "#D46A8E"]]) {
+    for (const [x, r, f, d] of [[-24, 18, "#FFFFFF", "#9AA7C9"], [-6, 20, "#BFE6FF", "#6F96CC"], [14, 18, "#FFD3E0", "#D46A8E"]]) {
       oval(x, -r, r * 0.42, r); fs(f, d, 2.2); oval(x, -r, r * 0.22, r * 0.6); fs(null, d, 1.4);
     }
     rr(26, -22, 16, 22, 3); fs("#FFF1A8", "#C9A227", 2.2);                       // a cup
   },
   ksh_herbs: () => {
-    for (const [x, col] of [[-28, "#E07A5F"], [0, "#5AA9FF"], [28, "#F2C14E"]]) {
+    for (const [x, col] of [[-28, "#E07A5F"], [0, "#8DB8E8"], [28, "#F2C14E"]]) {
       for (let i = 0; i < 5; i++) leaf(x + (i - 2) * 3, -14, 12 + (i % 2) * 4, 4, -Math.PI / 2 + (i - 2) * 0.4 + wob(0.6, x + i) * 0.04, "#6FCF5A", "#2F7D32");
       ctx.save(); ctx.translate(x, 0); pot(18, 14, col, "#7A4A1E"); ctx.restore();
     }
@@ -60,7 +60,7 @@ Object.assign(THINGS, {
     line([[-42, 0], [42, 0]], "#8A6A4A", 4);
     for (let i = 0; i < 4; i++) { oval(-24 + (i % 2) * 6, 12 + i * 10, 7, 6); fs("#FFF6E6", "#C9B8A6", 1.8); }     // a garlic braid
     for (let i = 0; i < 6; i++) { ctx.save(); ctx.translate(18 + (i % 2) * 6, 10 + i * 8); ctx.rotate(0.4 - (i % 2) * 0.8);
-      ctx.beginPath(); ctx.ellipse(0, 0, 3.2, 7, 0, 0, Math.PI * 2); fs("#E23D3D", "#9E1F2E", 1.6); ctx.restore(); }  // dried chilies
+      ctx.beginPath(); ctx.ellipse(0, 0, 3.2, 7, 0, 0, Math.PI * 2); fs("#E0675A", "#A23A34", 1.6); ctx.restore(); }  // dried chilies
     line([[-21, 0], [-21, 8]], "#C9A27A", 2); line([[21, 0], [21, 6]], "#C9A27A", 2);
   },
   kp_copper: () => {
@@ -74,7 +74,7 @@ Object.assign(THINGS, {
   },
   /* clocks: hands show the real time */
   kk_round: () => {
-    oval(0, 0, 20, 20); fs("#FFFFFF", "#3B8BEF", 3.4);
+    oval(0, 0, 20, 20); fs("#FFFFFF", "#7FA6D8", 3.4);
     clockHands(0, 0, 14, "#252A5C");
   },
   kk_fish: () => {
@@ -93,7 +93,7 @@ Object.assign(THINGS, {
   /* fridges */
   kr_white: () => fridge("#F4F7FF", "#8F9AC4", false),
   kr_mint: () => fridge("#BFEBDD", "#3E9C82", false),
-  kr_retro: () => fridge("#FFB3B8", "#B23A48", true),
+  kr_retro: () => fridge("#FFB3B8", "#C25A66", true),
 });
 function clockHands(x, y, r, col) {
   const d = new Date(), m = d.getMinutes(), hr = (d.getHours() % 12) + m / 60;
@@ -120,7 +120,7 @@ function stove(body, dark, accent) {
   for (const x of [-24, -8, 8, 24]) { oval(x, -70, 3.4, 3.4); fs(accent, dark, 1.4); }    // knobs
   rr(-42, -90, 84, 10, 3); fs("#3B3F5C", dark, 2.2);
   for (const x of [-20, 20]) { oval(x, -92, 13, 3.5); fs("#2B2B3A"); }                     // burners
-  oval(20, -102, 12, 8); fs("#FF8A8A", "#B23A48", 2.2); rr(4, -104, 6, 3, 1); fs("#B23A48");   // a little pot
+  oval(20, -102, 12, 8); fs("#F4A08E", "#B5574A", 2.2); rr(4, -104, 6, 3, 1); fs("#B5574A");   // a little pot
 }
 function table(top, dark, cloth) {
   for (const x of [-48, 44]) { rr(x, -56, 6, 56, 2); fs(dark); }
@@ -136,10 +136,10 @@ function mat(fill, dark) { rr(-96, -20, 192, 40, 18); fs(fill, dark, 3); }
 
 Object.assign(THINGS, {
   kc_wood: () => counter("#E8C99A", "#D9A86C", "#8A5A2E"),
-  kc_blue: () => counter("#FFFFFF", "#8CC4FF", "#2F6AB0"),
+  kc_blue: () => counter("#FFFFFF", "#A8CBEF", "#4A72A8"),
   kc_marble: () => { counter("#F6F4F0", "#B5C9B5", "#5E7A5E"); line([[-60, -86], [-40, -82], [-20, -86]], "#CFCAC0", 1.4); },
   ks_white: () => stove("#F4F7FF", "#8F9AC4", "#FFFFFF"),
-  ks_red: () => stove("#FF8A8A", "#B23A48", "#FFE08A"),
+  ks_red: () => stove("#F4A090", "#B5574F", "#FFE08A"),
   ks_copper: () => stove("#E8B07A", "#9C5A2A", "#FFF1A8"),
   kt_round: () => {
     rr(-4, -56, 8, 56, 2); fs("#8A5A2E"); oval(0, -2, 22, 5); fs("#8A5A2E");
@@ -157,14 +157,14 @@ Object.assign(THINGS, {
   kru_fish: () => { mat("#FFE0C2", "#E07A4F"); for (const x of [-50, 0, 50]) { fishShape(x, 0, 11, x > 0 ? -1 : 1); fs("#FFB385", "#E07A4F", 2); } },
   kru_lemon: () => { mat("#FFF3B0", "#D9A441"); for (const x of [-54, -18, 18, 54]) { oval(x, 0, 10, 7, 0.3); fs("#FFE066", "#D9A441", 2); } },
   kb_fish: () => {
-    fishShape(-2, -8, 20, 1); fs("#5AA9FF", "#1F57B0", 2.6);
+    fishShape(-2, -8, 20, 1); fs("#8DB8E8", "#4A72A8", 2.6);
     for (const [x, y] of [[-8, -12], [0, -14], [8, -12]]) { oval(x, y, 3.2, 2.4); fs("#B9783D", "#7A4A1E", 1.2); }
   },
   kb_twin: () => THINGS.d_double(),
   kb_stand: () => {
     rr(-30, -14, 60, 8, 3); fs("#D9A86C", "#8A5A2E", 2.2);
     for (const x of [-24, 20]) { rr(x, -8, 4, 8, 1); fs("#8A5A2E"); }
-    for (const [x, f, d] of [[-14, "#FF8A8A", "#B23A48"], [14, "#8CC4FF", "#2F6AB0"]]) { poly([[x - 12, -26], [x + 12, -26], [x + 9, -14], [x - 9, -14]]); fs(f, d, 2.2); }
+    for (const [x, f, d] of [[-14, "#F4A08E", "#B5574A"], [14, "#A8CBEF", "#4A72A8"]]) { poly([[x - 12, -26], [x + 12, -26], [x + 9, -14], [x - 9, -14]]); fs(f, d, 2.2); }
   },
   kb_fountain: () => {
     poly([[-24, -14], [24, -14], [18, 0], [-18, 0]]); fs("#BFEBDD", "#3E9C82", 2.6);

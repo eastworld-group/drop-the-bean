@@ -32,9 +32,10 @@ cv.addEventListener("pointerdown", e => {
   lastInput = time;
   drag = null;
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-  if (overlay) return;
+  if (overlay) { if (overlay.kind === "roompick") rowDrag = rowAt(e.clientX, e.clientY, ["pick"]); return; }   // the picker's tiles slide too
   if (screen === "chapters") { chapDrag = { y0: e.clientY, s0: chapScroll, y: e.clientY, t: time }; chapVel = 0; }
-  if (screen === "mycat") rowDrag = rowAt(e.clientX, e.clientY);     // a row of cats or outfits can slide sideways
+  if (screen === "mycat") rowDrag = rowAt(e.clientX, e.clientY, ["cats", "outfits"]);   // a row of cats or outfits can slide sideways
+  if (screen === "room") rowDrag = rowAt(e.clientX, e.clientY, ["decor"]);           // and the row of spot names in My room
   if (screen === "game" && !aim) {                    // while she is aiming a powerup, a touch picks its target instead of sliding a bed
     const b = bedAtPoint(e.clientX, e.clientY);
     if (b) {
@@ -51,7 +52,7 @@ cv.addEventListener("pointermove", e => {
   if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) press.moved = true;
   if (drag && !overlay) dragTo(e.clientX, e.clientY);
   if (screen === "room") roomStroke(e.clientX, e.clientY);          // stroking her cat in My room
-  if (rowDrag && press.moved) dragRow(e.clientX);                     // sliding a row in My cat
+  if (rowDrag && press.moved) dragRow(e.clientX);                     // sliding a row (My cat, My room)
   if (chapDrag && press.moved) {                      // dragging the chapter list
     const dt = Math.max(1 / 120, time - chapDrag.t);
     chapVel = lerp(chapVel, -(e.clientY - chapDrag.y) / dt, 0.5);
@@ -155,7 +156,7 @@ function placeBox(el, box) {
 function render() {
   buttons = [];
   if (screen !== "mycat") myCatFresh = true;          // next time My cat opens, its rows show her cat and her outfit
-  if (screen !== "room") decorating = false;          // the room opens clean, not in decorate mode
+  if (screen !== "room") roomLeave();                 // the room opens clean, not in decorate mode, her cat in the middle
   drawBackground();
   if (screen === "home") drawHome();
   else if (screen === "game") drawGame();

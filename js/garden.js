@@ -23,19 +23,22 @@ Object.assign(WORDS.en, {
 });
 
 const GROUND_Y = 250, GWALL_Y = 262;
+// The fence along the far edge, lights strung across the top, the tree on the left, a back row
+// (bench, flower bed, bird house), the pond in the middle, and the hammock, a toy and a plant pot
+// at the front. The front right corner stays free for her cat while she decorates.
 Object.assign(SPOT_AT, {
   gsky:     { x: 0, y: 0, box: [0, 0, RW, GROUND_Y], layer: 0 },
   gground:  { x: 0, y: GROUND_Y, box: [0, 0, RW, RH - GROUND_Y], layer: 0 },
-  gfence:   { x: 0, y: 262, box: [0, -64, RW, 68], layer: 1 },
-  glamp:    { x: 180, y: 0, box: [-170, 0, 340, 64], layer: 1, plusY: -10 },
-  gtree:    { x: 66, y: 336, box: [-64, -300, 128, 304], layer: 2, depth: 336 },
-  gbird:    { x: 322, y: 304, box: [-26, -128, 52, 132], layer: 2, depth: 304 },
-  gflower:  { x: 236, y: 300, box: [-62, -40, 124, 44], layer: 2, depth: 300 },
-  gbench:   { x: 164, y: 326, box: [-52, -56, 104, 60], layer: 2, depth: 326 },
-  gpond:    { x: 250, y: 384, box: [-72, -28, 144, 56], layer: 2, depth: 0 },
-  ghammock: { x: 104, y: 424, box: [-74, -62, 148, 66], layer: 2, depth: 424 },
-  gpot:     { x: 328, y: 434, box: [-26, -62, 52, 66], layer: 2, depth: 434 },
-  gtoy:     { x: 210, y: 436, box: [-28, -30, 56, 34], layer: 2, depth: 436 },
+  gfence:   { x: 0, y: 262, box: [0, -64, RW, 68], layer: 1, lab: [222, -34] },
+  glamp:    { x: 180, y: 0, box: [-170, 0, 340, 64], layer: 1, lab: [0, 58] },
+  gtree:    { x: 62, y: 336, box: [-64, -300, 128, 304], layer: 2, depth: 336, lab: [0, -100] },
+  gbench:   { x: 156, y: 330, box: [-54, -60, 108, 64], layer: 2, depth: 330, lab: [-34, 12] },
+  gflower:  { x: 266, y: 298, box: [-64, -44, 128, 48], layer: 2, depth: 298 },
+  gbird:    { x: 334, y: 302, box: [-28, -150, 56, 154], layer: 2, depth: 302, lab: [0, -64] },
+  gpond:    { x: 214, y: 362, box: [-74, -28, 148, 56], layer: 2, depth: 0, lab: [0, 0] },
+  ghammock: { x: 94, y: 430, box: [-76, -62, 152, 66], layer: 2, depth: 430, lab: [0, -24] },
+  gtoy:     { x: 200, y: 436, box: [-28, -30, 56, 34], layer: 2, depth: 436, lab: [0, -40] },
+  gpot:     { x: 258, y: 436, box: [-28, -66, 56, 70], layer: 2, depth: 436, lab: [0, -30] },
 });
 Object.assign(SWATCH, { gsky: 1, gground: 1 });
 
@@ -96,10 +99,10 @@ Object.assign(PATTERNS, {
 
 /* ---------- the fixed parts: sky, far hills, ground ---------- */
 function drawGardenBase() {
-  PATTERNS[roomPut("gsky")](0, 0, RW, GROUND_Y + 10);
+  PATTERNS[roomShow("gsky")](0, 0, RW, GROUND_Y + 10);
   oval(70, GROUND_Y + 10, 140, 40); fs("#B7E3A0");                 // soft hills far away
   oval(300, GROUND_Y + 14, 160, 46); fs("#A8DB90");
-  PATTERNS[roomPut("gground")](0, GROUND_Y, RW, RH - GROUND_Y);
+  PATTERNS[roomShow("gground")](0, GROUND_Y, RW, RH - GROUND_Y);
 }
 
 // Its Style is the sky and the ground together (see ROOMS in js/room.js).
@@ -112,4 +115,39 @@ ROOMS.push({ id: "garden", spots: GARDEN_SPOTS, wallY: GWALL_Y, base: drawGarden
     { id: "g_night", put: ["gs_night", "gg_clover"] },       // 2200 + 500 = 2700
     { id: "g_rainbow", put: ["gs_rainbow", "gg_flowers"] },  // 4000 + 2600 = 6600
   ],
-  decor: ["gfence", "glamp", "gtree", "gbird", "gflower", "gbench", "gpond", "ghammock", "gpot", "gtoy"] });
+  decor: ["gtree", "gbench", "ghammock", "gpond", "gflower", "gpot", "gbird", "glamp", "gfence", "gtoy"] });
+
+// The faint shapes of the empty spots while decorating (see GHOSTS in js/room.js).
+Object.assign(GHOSTS, {
+  gfence: () => { for (const y of [-44, -18]) { rr(0, y, RW, 7, 2); gfs(); } for (let x = 6; x < RW; x += 48) { rr(x, -58, 14, 58, 3); gfs(); } },
+  glamp: () => {
+    ctx.beginPath(); for (let i = 0; i <= 20; i++) { const [x, y] = lampAt(i / 20); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    gfs(false);
+    for (let i = 1; i < 8; i++) { const [x, y] = lampAt(i / 8); oval(x, y + 8, 5, 6); gfs(); }
+  },
+  gtree: () => {
+    poly([[-12, 0], [12, 0], [8, -170], [-8, -170]]); gfs();
+    ctx.beginPath(); ctx.ellipse(0, -214, 64, 58, 0, 0, Math.PI * 2); gfs();
+  },
+  gbird: () => { rr(-4, -96, 8, 96, 2); gfs(); rr(-18, -126, 36, 30, 4); gfs(); poly([[-24, -126], [0, -144], [24, -126]]); gfs(); oval(0, -110, 5, 5); gfs(false); },
+  gflower: () => {
+    rr(-60, -14, 120, 16, 7); gfs();
+    for (let i = 0; i < 5; i++) {
+      const x = -44 + i * 22, top = [-30, -40, -26, -38, -32][i];
+      gline([[x, -12], [x, top]]); gleaf(x, -18, 10, 4, i % 2 ? -0.6 : Math.PI + 0.6);
+      oval(x, top - 6, 7, 7); gfs(); oval(x, top - 6, 2.5, 2.5); gfs(false);
+    }
+  },
+  gbench: () => {
+    for (const x of [-44, 38]) { rr(x, -54, 6, 54, 2); gfs(); }
+    rr(-50, -30, 100, 8, 3); gfs(); rr(-48, -52, 96, 17, 3); gfs();
+  },
+  gpond: () => { oval(0, 0, 70, 24); gfs(); oval(0, 0, 50, 15); gfs(false); },
+  ghammock: () => {
+    for (const d of [-1, 1]) gline([[d * 66, 0], [d * 58, -58]]);
+    gline([[-70, 0], [70, 0]]);
+    ctx.beginPath(); ctx.moveTo(-58, -52); ctx.quadraticCurveTo(0, -6, 58, -52); ctx.quadraticCurveTo(0, -22, -58, -52); ctx.closePath(); gfs();
+  },
+  gpot: () => { for (const a of [-2.1, -1.8, -1.57, -1.34, -1.05]) gleaf(0, -24, 28, 6, a); gpot(30, 24); },
+  gtoy: () => { oval(0, -10, 10, 10); gfs(); },
+});

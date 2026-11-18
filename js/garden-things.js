@@ -66,7 +66,7 @@ Object.assign(THINGS, {
   gl_star: () => {
     lampString("#8A6A4A");
     for (let i = 1; i < 5; i++) {                                // star lanterns, each with two little tails
-      const [x, y] = lampAt(i / 5), col = ["#FF6B6B", "#FFD23F", "#5AA9FF", "#82DD5C"][i - 1];
+      const [x, y] = lampAt(i / 5), col = ["#F4877A", "#FFD45E", "#7FB2E5", "#8FD47E"][i - 1];
       line([[x, y], [x, y + 6]], "#8A6A4A", 1.6);
       glow(x, y + 20, 18, "rgba(255, 230, 150, 0.4)");
       starPath(x, y + 20, 13, 0.5); fs(col, "#8A3A3A", 2);
@@ -85,8 +85,8 @@ Object.assign(THINGS, {
   gt_house: () => {
     trunk(); canopy(0, -230, 64, "#6CC35E", "#2F7D32");
     rr(-6, -172, 76, 8, 2); fs("#C08A50", "#8A5A2E", 2.2);                  // the platform and a little house
-    rr(30, -206, 36, 34, 3); fs("#FF9D8A", "#B23A48", 2.2);
-    poly([[26, -206], [48, -226], [70, -206]]); fs("#B23A48", "#7A2232", 2.2);
+    rr(30, -206, 36, 34, 3); fs("#FF9D8A", "#B5574A", 2.2);
+    poly([[26, -206], [48, -226], [70, -206]]); fs("#C26A5E", "#8A3A32", 2.2);
     rr(42, -196, 12, 24, 5); fs("#5C3A1B");
     for (let y = -160; y < -6; y += 14) line([[-14, y], [-24, y + 4]], "#8A5A2E", 2.4);      // a ladder up the trunk
     line([[-26, -164], [-26, -2]], "#8A5A2E", 2.4);
@@ -94,7 +94,7 @@ Object.assign(THINGS, {
   gh_box: () => { birdPole(96); rr(-18, -128, 36, 34, 4); fs("#8CC4FF", "#2F6AB0", 2.4); oval(0, -112, 5, 5); fs("#1F2E4A"); rr(-20, -132, 40, 6, 2); fs("#2F6AB0"); },
   gh_house: () => {
     birdPole(90); rr(-20, -118, 40, 30, 3); fs("#FFE08A", "#C9A227", 2.4);
-    poly([[-26, -118], [0, -138], [26, -118]]); fs("#FF8A8A", "#B23A48", 2.4);
+    poly([[-26, -118], [0, -138], [26, -118]]); fs("#F4A08E", "#B5574A", 2.4);
     oval(0, -104, 5, 5); fs("#5C3A1B"); littleBird(14, -142, "#8CC4FF");
   },
   gh_bath: () => {
@@ -169,8 +169,8 @@ Object.assign(THINGS, {
   gpt_fern: () => { for (let i = 0; i < 6; i++) leaf(0, -24, 26 - Math.abs(i - 2.5) * 3, 6, -Math.PI / 2 + (i - 2.5) * 0.42 + wob(0.6, i) * 0.03, "#5DBB63", "#2F7D32"); pot(30, 24, "#E07A5F", "#A6452D"); },
   gpt_cactus: () => { rr(-8, -56, 16, 36, 8); fs("#7BC86C", "#2F7D32", 2.4); rr(-18, -44, 8, 16, 4); fs("#7BC86C", "#2F7D32", 2); rr(10, -48, 8, 14, 4); fs("#7BC86C", "#2F7D32", 2); oval(0, -58, 4, 4); fs("#FF7EB6", "#B02567", 1.6); pot(30, 22, "#F2C14E", "#A8730A"); },
   gpt_bamboo: () => { for (const [x, h] of [[-8, 56], [0, 64], [8, 50]]) { rr(x - 3, -h, 6, h - 20, 2); fs("#9BCB5A", "#4F7A2A", 1.6); leaf(x, -h + 4, 12, 4, -0.6 + x * 0.05, "#7ED36B", "#2F7D32"); } pot(32, 22, "#FFFFFF", "#9AA7C9"); },
-  gy_ball: () => { oval(0, -10, 10, 10); fs("#FF6B6B", "#9E1F2E", 2.2); ctx.save(); oval(0, -10, 10, 10); ctx.clip(); ctx.fillStyle = "#FFFFFF"; ctx.fillRect(-10, -12, 20, 4); ctx.restore(); },
-  gy_tunnel: () => { rr(-26, -20, 52, 20, 10); fs("#B981FF", "#6431BD", 2.4); for (let x = -18; x < 26; x += 9) line([[x, -19], [x, -1]], "#9C5BF4", 1.6); oval(-26, -10, 6, 10); fs("#35176E", "#6431BD", 2); },
+  gy_ball: () => { oval(0, -10, 10, 10); fs("#F4877A", "#B04A40", 2.2); ctx.save(); oval(0, -10, 10, 10); ctx.clip(); ctx.fillStyle = "#FFFFFF"; ctx.fillRect(-10, -12, 20, 4); ctx.restore(); },
+  gy_tunnel: () => { rr(-26, -20, 52, 20, 10); fs("#C7A8EE", "#7A5BB0", 2.4); for (let x = -18; x < 26; x += 9) line([[x, -19], [x, -1]], "#A98AD8", 1.6); oval(-26, -10, 6, 10); fs("#4A3878", "#7A5BB0", 2); },
   gy_butterfly: () => {
     line([[-14, 0], [-14, -22]], "#8A5A2E", 2.2); line([[-14, -22], [6, -30]], "#8A5A2E", 1.4);       // a wand with a butterfly on a string
     const flap = S.calm ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(time * 4));

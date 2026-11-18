@@ -2,13 +2,15 @@
 /* ==================================================================
    DROP THE BEAN - room: her cats' own room, decorated with coins.
    One cozy room with 16 spots (the list is ROOM_SPOTS in core.js).
-   The room opens clean. The Decorate button shows the spots: a "+" on
-   an empty one, a soft outline on a filled one. Tapping a spot opens a
-   small picker for it. The wallpaper, floor and window view are chosen
-   together as one Style (each room's "styles" list). A few small spots share a
-   picker (the cat bed and cushion, the toy and bowl), so there are fewer
-   to look at. Things she owns can be swapped freely; anything new goes
-   through the "Buy?" card.
+   The room opens clean. The Decorate button turns on decorate mode: her
+   cat steps aside to a free corner and sits small, each empty spot shows
+   a faint dashed shape of what goes there (with its name), and each
+   filled spot gets a soft outline. A row of names at the bottom opens
+   each spot's picker, and so does tapping a spot. The picker is a small
+   sheet at the bottom, so the room stays in view: tapping something new
+   shows it in the room first, a second tap asks "Buy?". Things she owns
+   go in at once. The wallpaper, floor and window view are chosen together
+   as one Style (each room's "styles" list).
    Her own cat lives here, big, in front: she sits, naps, blinks and purrs.
    Everything is drawn in "room units": the room is 360 wide and 440
    tall, and the whole picture is scaled to fit the screen.
@@ -16,7 +18,7 @@
 
 Object.assign(WORDS.en, {
   rs_wall: "Wallpaper", rs_floor: "Floor", rs_view: "Window view", rs_pic: "Picture", rs_shelf: "Shelf",
-  rs_hang: "Ceiling", rs_sill: "Window sill", rs_lamp: "Lamp", rs_plant: "Plant", rs_tree: "Cat tree",
+  rs_hang: "Hanging", rs_sill: "Window sill", rs_lamp: "Lamp", rs_plant: "Plant", rs_tree: "Cat tree",
   rs_rug: "Rug", rs_post: "Scratch post", rs_bed: "Cat bed", rs_cush: "Cushion", rs_toy: "Toy", rs_bowl: "Food bowl",
   ri_w_plain: "Cream", ri_w_stripe: "Stripes", ri_w_dots: "Polka dots", ri_w_flower: "Flowers", ri_w_fish: "Little fish",
   ri_f_wood: "Wood", ri_f_tile: "Tiles", ri_f_check: "Checkers", ri_f_carpet: "Soft carpet", ri_f_bamboo: "Bamboo",
@@ -41,7 +43,7 @@ Object.assign(WORDS.en, {
   cal_tip: "Win the Daily nap and your cat brings a gift.", cal_tip2: "Missed a day? Your week waits. Day 7 is a big one.",
   open_gift: "Tap the gift",
   decorate: "Decorate", style: "Style", style_of: "{0} style", style_mix: "Now: your own mix",
-  rg_bed_cush: "Cat bed and cushion", rg_toy_bowl: "Toy and bowl",
+  try_tip: "Tap one to see it in your room", try_buy: "Like it? Tap it again to buy",
   st_b_cozy: "Cozy", st_b_rain: "Rainy day", st_b_sunset: "Pink sunset", st_b_night: "Starry night", st_b_spring: "Spring",
   st_k_sunny: "Sunny", st_k_mint: "Mint", st_k_picnic: "Picnic", st_k_lemon: "Lemon", st_k_brick: "Warm brick",
   st_g_sunny: "Sunny", st_g_clover: "Clover", st_g_sunset: "Sunset", st_g_night: "Starry night", st_g_rainbow: "Rainbow",
@@ -49,27 +51,30 @@ Object.assign(WORDS.en, {
 
 const RW = 360, RH = 440, WALL_Y = 290;
 /* Where each spot is. (x, y) is the spot's anchor: the top-left of the wall and floor, the
-   middle of the window glass and picture, the ceiling point a hanger hangs from, and the
-   floor point a standing thing stands on. box = [dx, dy, w, h] from the anchor: the part a
-   finger can tap, also used to fit the thing into a picker tile. "depth" sorts floor things
-   and cats so the nearer ones are drawn on top. */
+   middle of the window glass and picture, the ceiling point a hanger hangs from, the board a
+   shelf or sill thing stands on, and the floor point a standing thing stands on. box = [dx, dy,
+   w, h] from the anchor: the part a finger can tap, also used to fit the thing into a picker
+   tile. "depth" sorts floor things and cats so the nearer ones are drawn on top. "lab": where
+   the spot's name sits in decorate mode (from the anchor), when not just under the box.
+   The floor has three rows: tall things along the wall, the rug in the middle, small things
+   at the front. One front corner stays free for her cat while she decorates. */
 const SPOT_AT = {
   wall:  { x: 0, y: 0, box: [0, 0, RW, WALL_Y], layer: 0 },
   floor: { x: 0, y: WALL_Y, box: [0, 0, RW, RH - WALL_Y], layer: 0 },
   view:  { x: 262, y: 107, box: [-58, -62, 116, 124], layer: 0 },
   pic:   { x: 84, y: 64, box: [-42, -34, 84, 68], layer: 1 },
-  shelf: { x: 90, y: 160, box: [-56, -52, 112, 64], layer: 1 },
-  hang:  { x: 168, y: 0, box: [-30, 0, 60, 100], layer: 1, plusY: -14 },
-  sill:  { x: 268, y: 170, box: [-30, -44, 60, 46], layer: 1 },
-  lamp:  { x: 168, y: 316, box: [-30, -128, 60, 132], layer: 2, depth: 316 },
-  plant: { x: 32, y: 324, box: [-32, -116, 64, 120], layer: 2, depth: 324 },
-  tree:  { x: 316, y: 324, box: [-42, -230, 84, 234], layer: 2, depth: 324 },
-  rug:   { x: 186, y: 384, box: [-106, -28, 212, 56], layer: 2, depth: 0 },
-  post:  { x: 40, y: 432, box: [-24, -98, 48, 102], layer: 2, depth: 432 },
-  bed:   { x: 140, y: 394, box: [-44, -50, 88, 54], layer: 2, depth: 394 },
-  cush:  { x: 252, y: 400, box: [-38, -26, 76, 32], layer: 2, depth: 400 },
-  toy:   { x: 186, y: 432, box: [-26, -28, 52, 32], layer: 2, depth: 432 },
-  bowl:  { x: 306, y: 432, box: [-30, -26, 60, 30], layer: 2, depth: 432 },
+  shelf: { x: 90, y: 160, box: [-56, -48, 112, 60], layer: 1 },
+  hang:  { x: 156, y: 0, box: [-30, 0, 60, 92], layer: 1 },
+  sill:  { x: 262, y: 170, box: [-30, -46, 60, 48], layer: 1 },
+  plant: { x: 34, y: 324, box: [-32, -116, 64, 120], layer: 2, depth: 324 },
+  post:  { x: 100, y: 326, box: [-26, -100, 52, 104], layer: 2, depth: 326, lab: [0, -44] },
+  lamp:  { x: 166, y: 322, box: [-30, -128, 60, 132], layer: 2, depth: 322 },
+  bed:   { x: 234, y: 330, box: [-48, -68, 96, 72], layer: 2, depth: 330 },
+  tree:  { x: 318, y: 320, box: [-42, -234, 84, 238], layer: 2, depth: 320, gbox: [-38, -140, 76, 144], lab: [0, -48] },
+  rug:   { x: 166, y: 384, box: [-108, -28, 216, 56], layer: 2, depth: 0, lab: [0, 0] },
+  cush:  { x: 52, y: 430, box: [-38, -28, 76, 32], layer: 2, depth: 430, lab: [0, -40] },
+  toy:   { x: 136, y: 434, box: [-26, -28, 52, 32], layer: 2, depth: 434, lab: [0, -40] },
+  bowl:  { x: 216, y: 434, box: [-30, -28, 60, 32], layer: 2, depth: 434, lab: [0, -40] },
 };
 // The spots that fill the whole wall, floor, sky and window get a square swatch in the picker.
 const SWATCH = { wall: 1, floor: 1, view: 1 };
@@ -83,6 +88,18 @@ const curRoom = () => ROOMS[roomOpen(S.roomView) && ROOMS[S.roomView] ? S.roomVi
 const roomOfSpot = spot => Math.max(0, ROOMS.findIndex(R => R.spots.includes(spot)));
 const roomPut = spot => S.room.put[spot] || ROOM_FREE[spot] || "";
 const roomOwns = id => { const it = roomItem(id); return !!it && (it.price === 0 || S.room.own.includes(id)); };
+// Trying something before buying it: { spot, id } for one thing, or { style } for a Style. It shows in
+// the room while the picker (or its "Buy?" card) is open, and is never saved.
+let roomTry = null;
+let roomFocus = null;                            // the picker group whose spot glows ("style" or a spot id)
+function roomShow(spot) {
+  const tr = roomTry;
+  if (tr && overlay && (overlay.kind === "roompick" || overlay.kind === "buy")) {
+    if (tr.spot === spot) return tr.id;
+    if (tr.style) { const st = styleById(tr.style), i = st ? styleRoom(st).pieces.indexOf(spot) : -1; if (i >= 0) return st.put[i]; }
+  }
+  return roomPut(spot);
+}
 
 /* ---------- drawing helpers, in room units ---------- */
 function fs(fill, stroke, lw) {
@@ -248,7 +265,7 @@ function picFrame(fill, dark, inner) {
 }
 const THINGS = {
   p_fish: () => { picFrame("#D9A86C", "#8A5A2E", "#CDEBFA"); fishShape(-3, 0, 12, 1); fs("#FF9E4A", "#C25E12", 2.4); ctx.fillStyle = "#2E2E44"; oval(-9, -2, 1.8, 1.8); ctx.fill(); oval(18, -10, 3, 3); fs(null, "#8CC3E0", 1.6); oval(14, -16, 2, 2); fs(null, "#8CC3E0", 1.6); },
-  p_heart: () => { picFrame("#FF9DB5", "#C2456E", "#FFF1F4"); heartPath(0, 3, 34); fs("#FF5C8A", "#C2456E", 2.4); },
+  p_heart: () => { picFrame("#F7B8C8", "#C26A86", "#FFF1F4"); heartPath(0, 3, 34); fs("#F08AA6", "#C26A86", 2.4); },
   p_hills: () => {
     picFrame("#FFFFFF", "#9AA7C9", "#BFE6FF");
     ctx.save(); rr(-30, -22, 60, 44, 4); ctx.clip();
@@ -263,21 +280,21 @@ const THINGS = {
     ctx.restore(); rr(-30, -22, 60, 44, 4); fs(null, "#B8860B", 2);
   },
   s_books: () => {
-    for (const [x, w, h, f, d] of [[-46, 10, 34, "#5AA9FF", "#1F57B0"], [-35, 8, 28, "#FF8A8A", "#B23A48"], [-26, 12, 38, "#82DD5C", "#35891E"]]) {
+    for (const [x, w, h, f, d] of [[-46, 10, 34, "#8DB8E8", "#4A72A8"], [-35, 8, 28, "#F4A08E", "#B5574A"], [-26, 12, 38, "#A8D49A", "#4E8A45"]]) {
       rr(x, -h, w, h, 2); fs(f, d, 2.4); line([[x + 2, -h + 6], [x + w - 2, -h + 6]], d, 1.6);
     }
-    ctx.save(); ctx.translate(-8, 0); ctx.rotate(0.35); rr(-1, -32, 10, 32, 2); fs("#FFD23F", "#B8860B", 2.4); ctx.restore();
+    ctx.save(); ctx.translate(-8, 0); ctx.rotate(0.35); rr(-1, -32, 10, 32, 2); fs("#F2CF6B", "#A8862A", 2.4); ctx.restore();
     rr(22, -18, 18, 18, 4); fs("#FFFFFF", "#9AA7C9", 2.4);                      // a mug
     ctx.beginPath(); ctx.arc(41, -10, 5, -Math.PI / 2, Math.PI / 2); fs(null, "#9AA7C9", 2.4);
-    ctx.fillStyle = "#FF8FB3"; heartPath(31, -9, 9); ctx.fill();
+    ctx.fillStyle = "#F4A6BE"; heartPath(31, -9, 9); ctx.fill();
   },
   s_jar: () => {
     rr(-14, -36, 28, 36, 7); fs("rgba(214, 238, 255, 0.8)", "#7FA6C9", 2.6);
     ctx.save(); rr(-14, -36, 28, 36, 7); ctx.clip();
     for (const [x, y, d] of [[-6, -6, 1], [5, -9, -1], [-2, -15, -1], [7, -20, 1], [-6, -24, 1]]) { fishShape(x, y, 4, d); fs("#FFA24D", "#C25E12", 1.2); }
     ctx.restore();
-    rr(-16, -43, 32, 9, 4); fs("#FF8A1F", "#B9590A", 2.4);
-    for (const [x, h, f, d] of [[-46, 22, "#B981FF", "#6431BD"], [-46, 12, "#5FE0C0", "#1E7A62"]]) { rr(x, -h - (h === 12 ? 22 : 0), 26, h === 12 ? 10 : 22, 2); fs(f, d, 2.2); }
+    rr(-16, -43, 32, 9, 4); fs("#F2A35E", "#B5672A", 2.4);
+    for (const [x, h, f, d] of [[-46, 22, "#C7A8EE", "#7A5BB0"], [-46, 12, "#8FD9C4", "#3E8C78"]]) { rr(x, -h - (h === 12 ? 22 : 0), 26, h === 12 ? 10 : 22, 2); fs(f, d, 2.2); }
   },
   s_vine: () => {
     for (let i = 0; i < 6; i++) leaf(-4 + i * 2, -14, 14, 6, -2.2 + i * 0.4, "#6FCF5A", "#2F7D32");
@@ -333,7 +350,7 @@ const THINGS = {
       line([[0, 0], [0, y - 10]], "#8A6A4A", 1.4);
       if (kind === "star") { starPath(0, y, 10); fs("#FFD23F", "#D9920C", 2.2); }
       else if (kind === "moon") { ctx.beginPath(); ctx.arc(0, y, 10, 0.6, Math.PI * 2 - 0.6); ctx.arc(5, y, 6.5, -1.049, 1.049, true); ctx.closePath(); fs("#FFF1A8", "#C9A227", 2.2); }
-      else { fishShape(0, y, 8, 1); fs("#5AA9FF", "#1F57B0", 2.2); }
+      else { fishShape(0, y, 8, 1); fs("#8DB8E8", "#4A72A8", 2.2); }
       ctx.restore();
     }
     ctx.restore();
@@ -353,7 +370,7 @@ const THINGS = {
     for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; oval(Math.cos(a) * 8, Math.sin(a) * 8, 4.5, 4.5); fs("#FFD23F", "#D9920C", 1.4); }
     oval(0, 0, 6, 6); fs("#8A5A2E", "#5C3A1B", 1.6);
     ctx.restore();
-    pot(22, 15, "#5AA9FF", "#1F57B0");
+    pot(22, 15, "#8DB8E8", "#4A72A8");
   },
   l_fishbowl: () => {
     oval(0, -19, 19, 18); fs("rgba(190, 230, 255, 0.8)", "#6FA3CF", 2.6);
@@ -366,8 +383,8 @@ const THINGS = {
   },
   m_round: () => {
     glow(0, -96, 58, "rgba(255, 228, 140, 0.5)");
-    oval(0, -3, 18, 5); fs("#7F8AC9", "#2B3783", 2.6);
-    line([[0, -4], [0, -86]], "#2B3783", 5); line([[0, -4], [0, -86]], "#7F8AC9", 2.4);
+    oval(0, -3, 18, 5); fs("#9AA6D6", "#4A5596", 2.6);
+    line([[0, -4], [0, -86]], "#4A5596", 5); line([[0, -4], [0, -86]], "#9AA6D6", 2.4);
     rr(-24, -114, 48, 30, 14); fs("#FFE08A", "#C9A227", 2.8);
   },
   m_tall: () => {
@@ -381,7 +398,7 @@ const THINGS = {
   m_mush: () => {
     glow(0, -48, 52, "rgba(255, 200, 140, 0.5)");
     rr(-10, -52, 20, 52, 9); fs("#FFF3D6", "#C9A27A", 2.6);
-    ctx.beginPath(); ctx.ellipse(0, -50, 34, 30, 0, Math.PI, 0); ctx.closePath(); fs("#FF6B6B", "#B23A48", 2.8);
+    ctx.beginPath(); ctx.ellipse(0, -50, 34, 30, 0, Math.PI, 0); ctx.closePath(); fs("#F08A7E", "#B5574F", 2.8);
     for (const [x, y, r] of [[-18, -60, 5], [2, -70, 6], [19, -58, 4.5], [-4, -55, 3.5]]) { oval(x, y, r, r); fs("#FFFFFF"); }
   },
   t_fern: () => {
@@ -403,7 +420,7 @@ const THINGS = {
       ctx.restore();
     }
     pot(34, 30, "#FFFFFF", "#9AA7C9");
-    line([[-14, -18], [14, -18]], "#5AA9FF", 2.6);
+    line([[-14, -18], [14, -18]], "#8DB8E8", 2.6);
   },
   t_leaf: () => {
     for (const [x, y, r, a] of [[-14, -66, 17, -0.5], [14, -78, 19, 0.4], [-2, -100, 16, 0], [18, -48, 13, 0.8], [-20, -44, 12, -0.9]]) {
@@ -426,7 +443,7 @@ const THINGS = {
       ctx.restore();
     }
     for (const [x, y] of [[8, -60], [12, -55], [6, -52]]) { ctx.beginPath(); ctx.ellipse(x, y, 7, 2.6, 0.6, 0, Math.PI * 2); fs("#FFD84D", "#B8860B", 1.6); }
-    pot(40, 30, "#8E6CC9", "#5A3E94");
+    pot(40, 30, "#A992D6", "#6A55A0");
   },
   r_small: () => {
     rr(-34, -10, 68, 10, 4); fs("#B59AD6", "#6E55A6", 2.6);
@@ -491,7 +508,7 @@ const THINGS = {
     rr(-22, -9, 44, 9, 3); fs("#7FC6E8", "#2F7FA8", 2.6);
     rr(-8, -78, 16, 70, 3); fs("#E8C99A", "#A6834F", 2.6);
     for (let y = -72; y < -10; y += 6) line([[-7, y], [7, y + 3]], "#A6834F", 1.6);
-    fishShape(-4, -88, 18, 1); fs("#5AA9FF", "#1F57B0", 2.8);
+    fishShape(-4, -88, 18, 1); fs("#8DB8E8", "#4A72A8", 2.8);
     ctx.fillStyle = "#FFFFFF"; oval(-12, -91, 3.5, 3.5); ctx.fill(); ctx.fillStyle = INK; oval(-12, -91, 1.8, 1.8); ctx.fill();
   },
   o_cactus: () => {
@@ -519,8 +536,8 @@ const THINGS = {
     oval(0, -30, 31, 5); fs("#FFE3EE", "#D46A8E", 2);
   },
   b_round: () => {
-    oval(0, -14, 42, 16); fs("#7FA0FF", "#3D5BC2", 2.8);
-    oval(0, -17, 28, 9); fs("#DDE6FF", "#3D5BC2", 2);
+    oval(0, -14, 42, 16); fs("#94BFEA", "#4A72B0", 2.8);
+    oval(0, -17, 28, 9); fs("#E3EEFA", "#4A72B0", 2);
     oval(-20, -22, 9, 3); fs("rgba(255,255,255,0.45)");
   },
   b_cave: () => {
@@ -537,21 +554,21 @@ const THINGS = {
     for (const [x, y, i] of [[-36, -44, 0], [38, -42, 1]]) { ctx.globalAlpha = 0.5 + 0.5 * Math.abs(wob(1.6, i * 2)); twinkle(x, y, 4); }
     ctx.globalAlpha = 1;
   },
-  c_round: () => { oval(0, -8, 33, 11); fs("#FF8A1F", "#B9590A", 2.8); oval(0, -10, 26, 7); fs("#FFB066"); oval(0, -10, 3, 2); fs("#B9590A"); },
-  c_heart: () => { ctx.save(); ctx.translate(0, -10); ctx.scale(1, 0.5); heartPath(0, 6, 64); fs("#FF7EB6", "#B02567", 4); ctx.restore(); },
-  c_star: () => { ctx.save(); ctx.translate(0, -10); ctx.scale(1, 0.5); starPath(0, 0, 36, 0.55); fs("#FFD23F", "#D9920C", 4.5); ctx.restore(); },
+  c_round: () => { oval(0, -8, 33, 11); fs("#FFB37A", "#C27236", 2.8); oval(0, -10, 26, 7); fs("#FFD0A6"); oval(0, -10, 3, 2); fs("#C27236"); },
+  c_heart: () => { ctx.save(); ctx.translate(0, -10); ctx.scale(1, 0.5); heartPath(0, 6, 64); fs("#F7A3C0", "#C25A82", 4); ctx.restore(); },
+  c_star: () => { ctx.save(); ctx.translate(0, -10); ctx.scale(1, 0.5); starPath(0, 0, 36, 0.55); fs("#FFDB7A", "#C9A23A", 4.5); ctx.restore(); },
   c_bean: () => {
     ctx.beginPath(); ctx.moveTo(-36, 0); ctx.bezierCurveTo(-42, -30, -18, -40, 0, -34); ctx.bezierCurveTo(20, -42, 42, -30, 36, 0); ctx.closePath();
-    fs("#5FCB9A", "#2B8261", 2.8);
-    ctx.beginPath(); ctx.moveTo(-16, -18); ctx.quadraticCurveTo(0, -10, 18, -20); fs(null, "#2B8261", 2);
+    fs("#8FD4B4", "#3E8C6C", 2.8);
+    ctx.beginPath(); ctx.moveTo(-16, -18); ctx.quadraticCurveTo(0, -10, 18, -20); fs(null, "#3E8C6C", 2);
     oval(-18, -26, 8, 3); fs("rgba(255,255,255,0.4)");
   },
   y_yarn: () => {
-    oval(0, -11, 11, 11); fs("#FF7EB6", "#B02567", 2.6);
+    oval(0, -11, 11, 11); fs("#F7A3C0", "#C25A82", 2.6);
     ctx.save(); oval(0, -11, 11, 11); ctx.clip();
-    for (const k of [-6, 0, 6]) { ctx.beginPath(); ctx.ellipse(k, -11, 4, 12, 0.5, 0, Math.PI * 2); fs(null, "#B02567", 1.4); }
+    for (const k of [-6, 0, 6]) { ctx.beginPath(); ctx.ellipse(k, -11, 4, 12, 0.5, 0, Math.PI * 2); fs(null, "#C25A82", 1.4); }
     ctx.restore();
-    ctx.beginPath(); ctx.moveTo(9, -4); ctx.quadraticCurveTo(18, 2, 24, -3); fs(null, "#B02567", 2);
+    ctx.beginPath(); ctx.moveTo(9, -4); ctx.quadraticCurveTo(18, 2, 24, -3); fs(null, "#C25A82", 2);
   },
   y_mouse: () => {
     ctx.beginPath(); ctx.moveTo(12, -6); ctx.quadraticCurveTo(24, -2, 22, -12); fs(null, "#6B7089", 2);
@@ -569,15 +586,15 @@ const THINGS = {
   },
   d_basic: () => {
     for (const [x, y] of [[-8, -17], [0, -19], [8, -17], [-3, -15], [5, -15]]) { oval(x, y, 3.5, 2.6); fs("#B9783D", "#7A4A1E", 1.2); }
-    poly([[-21, -16], [21, -16], [15, 0], [-15, 0]]); fs("#5AA9FF", "#1F57B0", 2.6);
+    poly([[-21, -16], [21, -16], [15, 0], [-15, 0]]); fs("#8DB8E8", "#4A72A8", 2.6);
     ctx.fillStyle = "#FFFFFF"; paw(0, -8, 6);
   },
   d_double: () => {
     rr(-34, -4, 68, 8, 4); fs("#FFD3E0", "#D46A8E", 2.4);
     for (const [x, y] of [[-21, -15], [-14, -16], [-9, -14], [-17, -13]]) { oval(x, y, 3, 2.3); fs("#B9783D", "#7A4A1E", 1.2); }
-    poly([[-29, -14], [-3, -14], [-6, -1], [-26, -1]]); fs("#FF8A8A", "#B23A48", 2.4);
+    poly([[-29, -14], [-3, -14], [-6, -1], [-26, -1]]); fs("#F4A08E", "#B5574A", 2.4);
     oval(16, -14, 11, 2.6); fs("#8CC4FF");
-    poly([[3, -14], [29, -14], [26, -1], [6, -1]]); fs("#82DD5C", "#35891E", 2.4);
+    poly([[3, -14], [29, -14], [26, -1], [6, -1]]); fs("#A8D49A", "#4E8A45", 2.4);
   },
   d_gold: () => {
     fishShape(2, -22, 10, -1); fs("#C3CBE0", "#6B7089", 2);
@@ -586,6 +603,48 @@ const THINGS = {
     ctx.fillStyle = "#D9920C"; paw(0, -9, 7);
     ctx.fillStyle = "#FFFFFF"; ctx.globalAlpha = 0.5 + 0.5 * Math.abs(wob(2.2)); twinkle(-20, -26, 4); twinkle(22, -6, 3); ctx.globalAlpha = 1;
   },
+};
+
+/* ---------- the faint shapes of empty spots (decorate mode) ----------
+   Each is drawn around the spot's anchor, the same way and at the same size as the things
+   that go there: a soft white fill, a pale edge, then soft blue dashes, so it shows on a light
+   wall and on a night sky alike. */
+function gfs(fill) {
+  if (fill !== false) { ctx.fillStyle = "rgba(255, 255, 255, 0.4)"; ctx.fill(); }
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.setLineDash([]); ctx.strokeStyle = "rgba(255, 255, 255, 0.75)"; ctx.lineWidth = 4.4; ctx.stroke();
+  ctx.setLineDash([7, 5]); ctx.strokeStyle = "rgba(70, 82, 156, 0.8)"; ctx.lineWidth = 2.2; ctx.stroke();
+  ctx.setLineDash([]);
+}
+function gline(pts) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); gfs(false); }
+function gpot(w, h) { poly([[-w / 2, -h], [w / 2, -h], [w * 0.38, 0], [-w * 0.38, 0]]); gfs(); }
+function gleaf(x, y, len, wid, ang) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.5, -wid, len, 0); ctx.quadraticCurveTo(len * 0.5, wid, 0, 0); ctx.closePath();
+  gfs(); ctx.restore();
+}
+function gbowl(w) { poly([[-w, -16], [w, -16], [w * 0.72, 0], [-w * 0.72, 0]]); gfs(); }
+const GHOSTS = {
+  pic: () => { rr(-38, -30, 76, 60, 7); gfs(); rr(-28, -20, 56, 40, 4); gfs(false); gline([[-24, 14], [-8, -2], [4, 9], [14, 1], [24, 12]]); },
+  shelf: () => {
+    for (const [x, w, h] of [[-44, 10, 34], [-32, 9, 28], [-20, 12, 38]]) { rr(x, -h, w, h, 2); gfs(); }
+    rr(10, -30, 26, 30, 7); gfs(); rr(8, -37, 30, 8, 3); gfs();
+  },
+  hang: () => { gline([[0, 0], [0, 32]]); oval(0, 58, 22, 24); gfs(); rr(-9, 30, 18, 6, 2); gfs(false); gline([[0, 82], [0, 90]]); },
+  sill: () => { for (const a of [-1.9, -1.57, -1.24]) gleaf(0, -14, 24, 6, a); gpot(24, 14); },
+  lamp: () => { oval(0, -3, 18, 5); gfs(); gline([[0, -8], [0, -84]]); rr(-24, -114, 48, 30, 14); gfs(); },
+  plant: () => { for (let i = 0; i < 5; i++) gleaf(0, -30, 46 + (2 - Math.abs(i - 2)) * 14, 13, -Math.PI / 2 + (i - 2) * 0.42); gpot(36, 30); },
+  tree: () => {
+    rr(-38, -10, 76, 10, 4); gfs();
+    rr(-24, -100, 14, 90, 3); gfs(); rr(-36, -110, 52, 11, 5); gfs();
+    rr(10, -130, 14, 120, 3); gfs(); rr(-8, -140, 46, 11, 5); gfs();
+  },
+  rug: () => { oval(0, 0, 96, 24); gfs(); oval(0, 0, 62, 14); gfs(false); },
+  post: () => { rr(-22, -9, 44, 9, 3); gfs(); rr(-8, -82, 16, 74, 3); gfs(); rr(-13, -90, 26, 9, 4); gfs(); },
+  bed: () => { oval(0, -16, 44, 17); gfs(); oval(0, -19, 29, 9); gfs(false); },
+  cush: () => { oval(0, -9, 33, 11); gfs(); },
+  toy: () => { oval(0, -11, 11, 11); gfs(); ctx.beginPath(); ctx.moveTo(9, -4); ctx.quadraticCurveTo(18, 2, 24, -3); gfs(false); },
+  bowl: () => gbowl(21),
 };
 
 // The fixed parts of the room: wall, floor, window frame and curtains, the shelf board, the sill.
@@ -598,15 +657,15 @@ function drawWindow(view, x, y, w, h) {
   rr(x, y, w, h, 4); fs(null, "#B9A48E", 2);
 }
 function drawRoomBase() {
-  PATTERNS[roomPut("wall")](0, 0, RW, WALL_Y);
-  PATTERNS[roomPut("floor")](0, WALL_Y, RW, RH - WALL_Y);
+  PATTERNS[roomShow("wall")](0, 0, RW, WALL_Y);
+  PATTERNS[roomShow("floor")](0, WALL_Y, RW, RH - WALL_Y);
   const g = ctx.createLinearGradient(0, WALL_Y, 0, WALL_Y + 26);                // a soft shadow where floor meets wall
   g.addColorStop(0, "rgba(60, 40, 30, 0.22)"); g.addColorStop(1, "rgba(60, 40, 30, 0)");
   ctx.fillStyle = g; ctx.fillRect(0, WALL_Y, RW, 26);
   rr(-4, WALL_Y - 10, RW + 8, 12, 3); fs("#FFFFFF", "#C9B8A6", 2.4);           // skirting board
   // window, curtains and sill
   const v = SPOT_AT.view;
-  drawWindow(roomPut("view"), v.x - 52, v.y - 58, 104, 112);
+  drawWindow(roomShow("view"), v.x - 52, v.y - 58, 104, 112);
   line([[v.x - 76, v.y - 72], [v.x + 76, v.y - 72]], "#8A5A2E", 5); line([[v.x - 76, v.y - 72], [v.x + 76, v.y - 72]], "#C98E58", 2.4);
   for (const d of [-1, 1]) {                                                     // curtains, tied back
     const outer = v.x + d * 80, inner = v.x + d * 46, tie = v.x + d * 64, top = v.y - 72, tieY = v.y + 8, bottom = v.y + 58;
@@ -664,7 +723,8 @@ function drawThingPreview(spot, id, cx, cy, size) {
    styles: 5 matching sets, cheapest first. "put" names one existing thing for each piece, in the
      same order, so things she already owns or has placed keep working. A style is hers when she owns
      every piece (free pieces need no owning); buying it buys the pieces she does not have yet.
-   decor: the other spots, in the order they are listed. A list in a list is one picker for both. */
+   decor: the other spots, in the order the names show in the row under the room in decorate mode
+     (the big things first). Each spot has its own picker. */
 ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase,
   pieces: ["wall", "floor", "view"],
   styles: [
@@ -674,7 +734,7 @@ ROOMS.push({ id: "bedroom", spots: ROOM_SPOTS, wallY: WALL_Y, base: drawRoomBase
     { id: "b_night", put: ["w_fish", "f_carpet", "v_stars"] },       // 2400 + 1200 + 2200 = 5800
     { id: "b_spring", put: ["w_flower", "f_bamboo", "v_rainbow"] },  // 1300 + 2000 + 4000 = 7300
   ],
-  decor: ["pic", "shelf", "hang", "sill", "lamp", "plant", "tree", "rug", "post", ["bed", "cush"], ["toy", "bowl"]] });
+  decor: ["bed", "cush", "rug", "lamp", "plant", "tree", "post", "pic", "shelf", "sill", "hang", "toy", "bowl"] });
 
 /* ---------- styles and decor spots: helpers for every room ---------- */
 const styleById = id => { for (const R of ROOMS) { const st = R.styles.find(q => q.id === id); if (st) return st; } return null; };
@@ -684,7 +744,7 @@ const isPiece = spot => ROOMS.some(R => R.pieces.includes(spot));
 const styleNow = R => R.styles.find(st => R.pieces.every((sp, i) => roomPut(sp) === st.put[i])) || null;
 const styleOwned = st => st.put.every(roomOwns);
 const styleCost = st => st.put.reduce((sum, id) => sum + (roomOwns(id) ? 0 : roomItem(id).price), 0);   // only the pieces she lacks
-// The picker groups of a room: first its Style, then each spot or pair of spots.
+// The picker groups of a room: first its Style, then each spot.
 function decorList(R) {
   if (!R._decor) R._decor = [{ key: "style", style: true, spots: R.pieces }].concat(R.decor.map(d => ({ key: [].concat(d).join("_"), spots: [].concat(d) })));
   return R._decor;
@@ -710,14 +770,53 @@ function drawStyleSwatch(st, cx, cy, size) {
    then a swish of her tail. Sometimes she curls up for a nap and wakes again, or strolls over to
    another of her three floor spots. Tapping her wakes her: she meows in her own voice and purrs,
    with a few hearts. Stroking her with a finger makes her purr and squint happily.
-   Calm motion: she sits still in her spot and only blinks. The same in all three rooms. */
+   Calm motion: she sits still in her spot and only blinks. The same in all three rooms.
+   While she decorates, her cat walks to a free front corner of the floor and sits there at about
+   half her size, so no spot is hidden behind her (calm motion: she is just there). On Done she
+   walks back to the middle. */
 const PET_S = 236;                         // her size in room units: sitting, about half the room wide
 const PET_FEET = RH - 14;                  // where her paws rest, at the front of the floor
 const PET_SPOTS = [180, 132, 228];         // her three floor spots: the middle, the left, the right
+const ASIDE_K = 0.45;                      // her size while she decorates, part of PET_S
 let pet = null, roomFx = [], strokeAt = null;
 function newPet() {
-  return { spot: 0, x: PET_SPOTS[0], face: 1, pose: "sit", wake: 1, move: null, until: time + 18 + Math.random() * 14,
-    blinkAt: time + 2 + Math.random() * 2, swishAt: time + 3 + Math.random() * 4, perk: -9, happy: -9, purrAt: -9, rub: 0 };
+  return { spot: 0, x: PET_SPOTS[0], fy: PET_FEET, k: 1, face: 1, pose: "sit", wake: 1, move: null, aside: false, asideRoom: -1,
+    until: time + 18 + Math.random() * 14, blinkAt: time + 2 + Math.random() * 2, swishAt: time + 3 + Math.random() * 4,
+    perk: -9, happy: -9, purrAt: -9, rub: 0 };
+}
+// The part of the room she covers, in room units, standing on x, feet at size k (her tail is left out:
+// it curls toward the room's edge).
+const catRect = (x, feet, k) => { const s = PET_S * k; return [x - s * 0.3, feet - s * 0.98, s * 0.6, s * 0.98]; };
+const overlap = (a, b) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+const spotRect = spot => { const at = SPOT_AT[spot], [bx, by, bw, bh] = at.box; return [at.x + bx, at.y + by, bw, bh]; };
+// Where she sits while decorating: the front corner that covers no spot (the right one first), or else
+// the place along the front, then the back, that covers the least.
+function petAside(R) {
+  const s = PET_S * ASIDE_K, feet = RH - 10, side = s * 0.3 + 4, list = [];
+  for (const f of [feet, R.wallY + 60]) {
+    list.push({ x: RW - side, feet: f, face: -1 }, { x: side, feet: f, face: 1 });
+    for (let x = RW - side - 30; x > side; x -= 30) list.push({ x, feet: f, face: x > RW / 2 ? -1 : 1 });
+  }
+  const spots = R.spots.filter(sp => SPOT_AT[sp].layer > 0);
+  let best = null;
+  for (const c of list) {
+    c.cover = spots.reduce((sum, sp) => sum + overlap(catRect(c.x, c.feet, ASIDE_K), spotRect(sp)), 0);
+    if (!best || c.cover < best.cover) best = c;
+    if (!c.cover) break;
+  }
+  return Object.assign({ k: ASIDE_K }, best);
+}
+// Decorate on: she goes aside. Done: back to the middle. Called each step; it only starts a move
+// when decorate mode or the room changes.
+function petPlace(p) {
+  const aside = decorating && screen === "room";
+  if (aside === p.aside && (!aside || p.asideRoom === S.roomView)) return;
+  p.aside = aside; p.asideRoom = aside ? S.roomView : -1;
+  const to = aside ? petAside(curRoom()) : { x: PET_SPOTS[0], feet: PET_FEET, k: 1, face: 1 };
+  p.pose = "sit"; p.spot = 0; p.until = time + 15 + Math.random() * 15;
+  if (S.calm) { Object.assign(p, { x: to.x, fy: to.feet, k: to.k, face: to.face, move: null }); return; }
+  p.face = Math.abs(to.x - p.x) < 2 ? to.face : to.x > p.x ? 1 : -1;
+  p.move = { x0: p.x, x1: to.x, f0: p.fy, f1: to.feet, k0: p.k, k1: to.k, face: to.face, t: 0, dur: 0.75 };
 }
 function roomUpdate(dt) {
   if (!pet) pet = newPet();
@@ -725,13 +824,17 @@ function roomUpdate(dt) {
   if (time - p.blinkAt > 0.18) p.blinkAt = time + 2.5 + Math.random() * 3.5;      // blinks, even with calm motion
   if (time - p.swishAt > 1.5) p.swishAt = time + 5 + Math.random() * 6;
   if (S.calm) { p.move = null; p.pose = "sit"; }
-  if (p.move) {                                                // a slow stroll to another spot
+  const fit = decorating ? 1 : 0;
+  roomFit = S.calm || Math.abs(fit - roomFit) < 0.01 ? fit : roomFit + (fit - roomFit) * Math.min(1, dt * 8);
+  petPlace(p);
+  if (p.move) {                                                // a stroll to another spot, or aside and back
     const m = p.move;
     m.t += dt;
-    const f = clamp01(m.t / m.dur);
-    p.x = lerp(m.x0, m.x1, f * f * (3 - 2 * f));
-    if (f >= 1) { p.move = null; p.x = m.x1; p.until = time + 15 + Math.random() * 15; }
-  } else if (time > p.until && !S.calm) {
+    const f = clamp01(m.t / m.dur), e = f * f * (3 - 2 * f);
+    p.x = lerp(m.x0, m.x1, e);
+    if (m.k1 !== undefined) { p.k = lerp(m.k0, m.k1, e); p.fy = lerp(m.f0, m.f1, e); }
+    if (f >= 1) { p.move = null; p.x = m.x1; if (m.face) p.face = m.face; p.until = time + 15 + Math.random() * 15; }
+  } else if (time > p.until && !S.calm && !p.aside) {
     p.until = time + 15 + Math.random() * 15;
     if (p.pose === "nap") p.pose = "sit";                       // she wakes up again
     else if (Math.random() < 0.4) { p.pose = "nap"; p.until = time + 10 + Math.random() * 12; }
@@ -746,16 +849,22 @@ function roomUpdate(dt) {
   for (const f of roomFx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; }
   roomFx = roomFx.filter(f => f.life > 0);
 }
+// Leaving My room: it opens clean next time, with her cat back in the middle (main.js calls this).
+function roomLeave() {
+  decorating = false; roomTry = null; roomFocus = null; roomFit = 0;
+  if (pet && (pet.aside || pet.k !== 1)) Object.assign(pet, { aside: false, asideRoom: -1, x: PET_SPOTS[0], fy: PET_FEET, k: 1, face: 1, spot: 0, move: null });
+}
 const petTarget = () => (pet.move || time < pet.perk || pet.pose === "sit" ? 1 : 0);
 // Where she is on the screen, for taps and strokes (a little wider when curled up).
 function petBox() {
-  const { k, ox, oy } = roomAt, nap = pet.wake < 0.5, w = PET_S * (nap ? 0.8 : 0.62) * k;
-  const top = oy + (PET_FEET - PET_S * (nap ? 0.6 : 0.92)) * k, bottom = oy + PET_FEET * k;
+  const { k, ox, oy } = roomAt, nap = pet.wake < 0.5, s = PET_S * pet.k, w = s * (nap ? 0.8 : 0.62) * k;
+  const top = oy + (pet.fy - s * (nap ? 0.6 : 0.92)) * k, bottom = oy + pet.fy * k;
   return { x: ox + pet.x * k - w / 2, y: top, w, h: bottom - top };
 }
 function hearts(n) {
   if (S.calm) n = 1;
-  for (let i = 0; i < n; i++) roomFx.push({ x: pet.x + (i - (n - 1) / 2) * 22, y: PET_FEET - PET_S * 0.86, vx: (i - (n - 1) / 2) * 14, vy: S.calm ? 0 : -34 - i * 6, life: 1.1, max: 1.1 });
+  const s = PET_S * pet.k;
+  for (let i = 0; i < n; i++) roomFx.push({ x: pet.x + (i - (n - 1) / 2) * 22 * pet.k, y: pet.fy - s * 0.86, vx: (i - (n - 1) / 2) * 14, vy: S.calm ? 0 : -34 - i * 6, life: 1.1, max: 1.1 });
 }
 // Tapping her: she wakes up or looks up, meows in her own voice, and purrs.
 function petCat() {
@@ -817,7 +926,7 @@ function openGift() {
   homeCat.squishT = time;                                       // her cat on the home screen gives a little happy squish
   overlay = { kind: "gift", t: 0, delay: 0, at: time, day, key, got };
 }
-const roomBusy = () => !!pet && (!!pet.move || Math.abs(pet.wake - petTarget()) > 0.02) || roomFx.length > 0;
+const roomBusy = () => !!pet && (!!pet.move || Math.abs(pet.wake - petTarget()) > 0.02) || roomFx.length > 0 || (decorating && !!roomFocus && !S.calm) || roomFit !== (decorating ? 1 : 0);
 
 /* ---------- the room screen ---------- */
 // A small wrapped present, standing on x, y (in whatever units are in use). Day 7's is golden.
@@ -845,19 +954,38 @@ function drawRoomTabs(y) {
   });
 }
 let roomAt = { k: 1, ox: 0, oy: 0 };
-let decorating = false;                           // the Decorate button shows the spots; Done hides them again
+let decorating = false;                           // decorate mode: the spots show; Done hides them again
+// The picker sheet at the bottom of the screen: the size of its tiles and its height.
+function sheetSize() {
+  const small = H < 640, tw = small ? 88 : 92, th = small ? 100 : 116;
+  return { tw, th, h: 64 + th + 12 + safeArea().b };
+}
+// Where the room sits: under the room names, above the Decorate button. While decorating it eases up
+// to sit above the picker sheet, so a thing she tries shows in full (but it never gets smaller than
+// three quarters of the space it has otherwise).
+let roomFit = 0;                                  // 0: the room as it opens, 1: room made for the picker sheet
+function roomLayout() {
+  const top = topY + 104, full = tabTop() - 66;
+  const bottom = lerp(full, Math.min(full, Math.max(H - sheetSize().h - 8, top + (full - top) * 0.75)), roomFit);
+  const availH = Math.max(60, bottom - top);
+  const k = Math.max(0.2, Math.min((W - 20) / RW, availH / RH));
+  return { k, ox: (W - RW * k) / 2, oy: top + Math.max(0, (availH - RH * k) * 0.5) };
+}
+// The part of a thing to outline or light up: most fill their spot's box; a few are much smaller.
+const ITEM_BOX = { r_small: [-40, -108, 80, 112], r_tall: [-44, -210, 88, 214], gh_box: [-24, -136, 48, 140], gh_bath: [-30, -66, 60, 70] };
+const boxFor = (spot, id) => (id && ITEM_BOX[id]) || (!id && SPOT_AT[spot].gbox) || SPOT_AT[spot].box;
+const chipName = d => (d.style ? t("style") : t("rs_" + d.spots[0]));
 function drawRoomScreen() {
-  const s = safeArea(), R = curRoom();
+  const R = curRoom();
   coinPill(16, topY + 11);
   buttons.push({ x: 16, y: topY + 9, w: 86, h: 40, onTap: () => openShop("room") });
   fitLabel(t("room"), W / 2, topY + 28, 26, W - 2 * 108, INK, 900);
   drawRoomTabs(topY + 52);
-  const tb = tabTop(), top = topY + 104, bottom = tb - 66, availH = Math.max(60, bottom - top);
-  const k = Math.max(0.2, Math.min((W - 20) / RW, availH / RH));
-  const ox = (W - RW * k) / 2, oy = top + Math.max(0, (availH - RH * k) * 0.5);
-  roomAt = { k, ox, oy };
+  const tb = tabTop();
+  roomAt = roomLayout();
+  const { k, ox, oy } = roomAt;
   if (!pet) pet = newPet();
-  const p = pet, show = decorating && !overlay;
+  const p = pet, show = decorating;
 
   // the room itself, in room units
   rr(ox - 5, oy - 5 + 6, RW * k + 10, RH * k + 10, 24); ctx.fillStyle = "rgba(20, 28, 90, 0.22)"; ctx.fill();
@@ -866,164 +994,228 @@ function drawRoomScreen() {
   ctx.translate(ox, oy); ctx.scale(k, k);
   rr(0, 0, RW, RH, 20 / k); ctx.clip();
   R.base();
-  for (const spot of R.spots) if (SPOT_AT[spot].layer === 1 && S.room.put[spot]) drawThing(spot, S.room.put[spot]);
-  // floor things, from back to front
-  const list = [];
-  for (const spot of R.spots) if (SPOT_AT[spot].layer === 2 && S.room.put[spot]) list.push({ depth: SPOT_AT[spot].depth, spot });
-  list.sort((a, b) => a.depth - b.depth);
-  for (const it of list) drawThing(it.spot, S.room.put[it.spot]);
-  // Decorating: each filled spot gets a soft outline (behind her, so none covers her face), and a
-  // spot or pair with nothing in it gets one "+".
-  const decor = decorList(R).filter(d => !d.style), empty = [];
-  if (show) for (const d of decor) {
-    const filled = d.spots.filter(sp => S.room.put[sp]);
-    if (!filled.length) { empty.push(d.spots[0]); continue; }
-    for (const sp of filled) {
-      const at = SPOT_AT[sp], [bx, by, bw, bh] = at.box;
-      rr(at.x + bx - 3, at.y + by - 3, bw + 6, bh + 6, 12);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.16)"; ctx.fill();
-      ctx.setLineDash([10, 7]); fs(null, "rgba(255, 255, 255, 0.92)", 3); ctx.setLineDash([]);
-    }
+  // Its things: the wall things, then the floor things from back to front. Decorating, an empty spot
+  // shows the faint shape of what goes there, in the same place and at the same size.
+  const order = R.spots.filter(sp => SPOT_AT[sp].layer > 0)
+    .sort((a, b) => SPOT_AT[a].layer - SPOT_AT[b].layer || (SPOT_AT[a].depth || 0) - (SPOT_AT[b].depth || 0));
+  for (const sp of order) {
+    const id = roomShow(sp), at = SPOT_AT[sp];
+    if (id) drawThing(sp, id);
+    else if (show && GHOSTS[sp]) { ctx.save(); ctx.translate(at.x, at.y); GHOSTS[sp](); ctx.restore(); }
   }
-  // her, big, in front of it all
+  // Decorating: a soft outline around each filled spot, and a gentle glow on the one being picked.
+  if (show) for (const sp of order) {
+    const id = roomShow(sp);
+    if (!id || sp === roomFocus) continue;
+    const at = SPOT_AT[sp], [bx, by, bw, bh] = boxFor(sp, id);
+    rr(at.x + bx - 3, at.y + by - 3, bw + 6, bh + 6, 12);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; ctx.lineWidth = 4; ctx.stroke();
+    ctx.setLineDash([9, 7]); ctx.strokeStyle = "rgba(70, 82, 156, 0.5)"; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+  }
+  const lit = !show || !roomFocus ? "" : roomFocus === "style" ? R.pieces.find(sp => WINDOW_SPOTS[sp]) || "" : roomFocus;
+  if (lit) {
+    const at = SPOT_AT[lit], [bx, by, bw, bh] = boxFor(lit, SWATCH[lit] ? "" : roomShow(lit));
+    const a = S.calm ? 0.9 : 0.7 + 0.25 * Math.sin(time * 3.2);
+    ctx.save();
+    rr(at.x + bx - 5, at.y + by - 5, bw + 10, bh + 10, 14);
+    ctx.fillStyle = "rgba(255, 232, 160, 0.22)"; ctx.fill();
+    ctx.shadowColor = "rgba(255, 186, 60, 0.95)"; ctx.shadowBlur = 14;
+    ctx.strokeStyle = `rgba(255, 160, 40, ${a})`; ctx.lineWidth = 3.4; ctx.stroke();
+    ctx.restore();
+  }
+  // her, in front of it all (small and in a corner while decorating)
+  const s = PET_S * p.k;
   const bt = time - p.blinkAt, blink = bt >= 0 && bt < 0.18 ? Math.sin(bt / 0.18 * Math.PI) : 0;
   const st = time - p.swishAt, wag = S.calm || st < 0 || st > 1.5 ? 0 : Math.sin(st * 6) * 0.13 * Math.sin(st / 1.5 * Math.PI);
-  const bob = p.move && !S.calm ? Math.abs(Math.sin(p.move.t * 7)) * 5 : 0;
-  drawCat(p.x, PET_FEET - PET_S * 0.37 - bob, PET_S, S.hero, { seed: 1.3, wake: p.wake, hat: S.hat, neck: S.neck, still: true,
+  const bob = p.move && !S.calm ? Math.abs(Math.sin(p.move.t * 7)) * 5 * p.k : 0;
+  drawCat(p.x, p.fy - s * 0.37 - bob, s, S.hero, { seed: 1.3, wake: p.wake, hat: S.hat, neck: S.neck, still: true,
     sx: -p.face, sy: 1, breath: S.calm ? 0 : 1, blink, wag, happy: time < p.happy });
   if (p.wake < 0.5 && !S.calm) {                              // little z's while she naps
     const zt = (time * 0.45) % 1;
     ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.8;
-    label("z", p.x + PET_S * 0.12 + zt * 10, PET_FEET - PET_S * 0.62 - zt * 22, Math.round(20 + zt * 10), INK, 900);
+    label("z", p.x + s * 0.12 + zt * 10, p.fy - s * 0.62 - zt * 22, Math.round(20 + zt * 10), INK, 900);
     ctx.globalAlpha = 1;
   }
   for (const f of roomFx) { ctx.globalAlpha = clamp01(f.life / f.max); ctx.fillStyle = "#FF5C8A"; drawHeart(f.x, f.y, 22); ctx.globalAlpha = 1; }
-  // The "+" signs. One that would sit on her moves out to her side, at the same height, so none
-  // is hidden and none covers her face.
-  const pluses = [], half = PET_S * (p.wake < 0.5 ? 0.4 : 0.31) + 16, petTop = PET_FEET - PET_S * (p.wake < 0.5 ? 0.6 : 0.92);
-  for (const spot of empty) {
-    const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
-    let mx = at.x + bx + bw / 2, my = at.y + by + bh / 2 + (at.plusY || 0);
-    if (Math.abs(mx - p.x) < half && my > petTop) mx = Math.max(14, Math.min(RW - 14, p.x + (mx < p.x ? -half : half)));
-    const clash = y => pluses.some(q => Math.abs(q[1] - mx) < 26 && Math.abs(q[2] - y) < 26);   // never two on top of each other
-    my = Math.max(14, Math.min(RH - 14, my));
-    for (let n = 1, y0 = my; clash(my) && n < 16; n++) {
-      const y = y0 + (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 26;
-      if (y >= 14 && y <= RH - 14) my = y;
-    }
-    pluses.push([spot, mx, my]);
-    ctx.globalAlpha = 0.95;
-    oval(mx, my, 11, 11); fs("rgba(255, 255, 255, 0.95)", "#8FB4E3", 2.4);
-    line([[mx - 5, my], [mx + 5, my]], SOFT, 3); line([[mx, my - 5], [mx, my + 5]], SOFT, 3);
-    ctx.globalAlpha = 1;
-  }
   ctx.restore();
 
-  // Tapping. Not decorating: only her (she purrs); the furniture does nothing. Decorating: the
-  // spots first (the big wall and floor at the bottom open the Style), then her, then every "+".
-  if (show) for (const spot of R.spots) {
-    const [bx, by, bw, bh] = SPOT_AT[spot].box, at = SPOT_AT[spot];
-    buttons.push({ x: ox + (at.x + bx) * k, y: oy + (at.y + by) * k, w: bw * k, h: bh * k, onTap: () => openPicker(spot) });
+  // Decorating: each spot can be tapped (the smaller ones are on top, so a thing in front of a big
+  // one can still be reached), and each empty spot (and the one being picked) has its name under it.
+  if (show) {
+    const taps = R.spots.filter(sp => SPOT_AT[sp].layer > 0 || WINDOW_SPOTS[sp]).map(sp => [sp, spotRect(sp)])
+      .sort((a, b) => b[1][2] * b[1][3] - a[1][2] * a[1][3]);
+    for (const [sp, r] of taps) buttons.push({ x: ox + r[0] * k, y: oy + r[1] * k, w: r[2] * k, h: r[3] * k, onTap: () => openPicker(sp), spotTap: true });
+    const names = [], h = 20, roomy = k >= 0.6;               // a small room shows only the name being picked
+    ctx.font = `800 12px ${FONT}`;
+    for (const sp of order) {
+      if ((roomShow(sp) || !roomy) && sp !== lit) continue;
+      const at = SPOT_AT[sp], [bx, by, bw, bh] = boxFor(sp, roomShow(sp)), text = t("rs_" + sp), w = ctx.measureText(text).width + 16;
+      let x = ox + (at.x + (at.lab ? at.lab[0] : bx + bw / 2)) * k, y = oy + (at.y + (at.lab ? at.lab[1] : by + bh + 10)) * k;
+      x = Math.max(ox + w / 2 + 4, Math.min(ox + RW * k - w / 2 - 4, x));
+      y = Math.max(oy + h / 2 + 4, Math.min(oy + RH * k - h / 2 - 4, y));
+      const free = dy => !names.some(q => Math.abs(q.x - x) < (q.w + w) / 2 + 3 && Math.abs(q.y - y - dy) < h + 2);
+      const dy = [0, 20, -20, 40, -40].find(free);              // never on top of another name
+      names.push({ sp, text, x, y: y + (dy || 0), w });
+    }
+    for (const q of names) {
+      const on = q.sp === lit;
+      rr(q.x - q.w / 2, q.y - h / 2, q.w, h, h / 2); ctx.fillStyle = on ? "#FFF0B3" : "rgba(255, 255, 255, 0.92)"; ctx.fill();
+      ctx.strokeStyle = on ? "#FF8A1F" : "rgba(70, 82, 156, 0.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+      label(q.text, q.x, q.y + 1, 12, on ? "#9C3A00" : SOFT, 800);
+      buttons.push({ x: q.x - q.w / 2, y: q.y - 13, w: q.w, h: 26, onTap: () => openPicker(q.sp), spotTap: true });
+    }
   }
+  // Tapping her: she purrs (not decorating, the furniture does nothing).
   const pb = petBox();
   buttons.push(Object.assign(pb, { onTap: petCat }));
-  for (const [spot, mx, my] of pluses) {
-    const r = Math.max(20, 14 * k);                               // a fingertip, even where the "+" is small
-    buttons.push({ x: ox + mx * k - r, y: oy + my * k - r, w: r * 2, h: r * 2, onTap: () => openPicker(spot) });
-  }
 
-  // One calm button under the room: Decorate. While decorating: Style and Done, and a short tip.
+  // One calm button under the room: Decorate. While decorating: a row of the room's spots, and Done.
   const by = tb - 56, roomEnd = oy + RH * k + 5;
   if (!decorating) {
     const bw = Math.min(200, W - 64);
-    pillButton(W / 2 - bw / 2, by, bw, 46, t("decorate"), () => { decorating = true; }, false);
+    pillButton(W / 2 - bw / 2, by, bw, 46, t("decorate"), () => { decorating = true; roomFocus = null; }, false);
     return;
   }
-  if (by - roomEnd >= 24) fitLabel(t("room_tip"), W / 2, (roomEnd + by) / 2, 13, W - 40, SOFT, 700);
-  const bw = Math.min(150, (W - 32 - 10) / 2);
-  pillButton(W / 2 - bw - 5, by, bw, 46, t("style"), () => openPicker(R.pieces[0]), false);
-  pillButton(W / 2 + 5, by, bw, 46, t("done"), () => { decorating = false; }, true);
+  if (by - roomEnd >= 30) fitLabel(t("room_tip"), W / 2, (roomEnd + by) / 2, 13, W - 40, SOFT, 700);
+  drawDecorChips(R, by);
+}
+// The row of names under the room while decorating: the Style first, then every spot. Too many to
+// fit: it slides, with a soft arrow at the end that has more. Tapping a name lights up its spot and
+// opens its picker. Done is always at the right.
+function drawDecorChips(R, y) {
+  const doneW = 88, x0 = 12, w = Math.max(60, W - 24 - doneW - 8), ch = 44, gap = 8;
+  ctx.font = `800 13px ${FONT}`;
+  const list = decorList(R), sizes = list.map(d => Math.max(64, ctx.measureText(chipName(d)).width + 30));
+  const total = sizes.reduce((sum, cw) => sum + cw + gap, -gap), max = Math.max(0, total - w);
+  rowScroll.decor = Math.max(0, Math.min(max, rowScroll.decor || 0));
+  myRows.decor = { x: x0, y, w, h: ch, max };
+  ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, y - 4, w + 4, ch + 12); ctx.clip();
+  let cx = max > 0 ? x0 - rowScroll.decor : x0 + (w - total) / 2;
+  list.forEach((d, i) => {
+    const cw = sizes[i];
+    if (cx + cw > x0 && cx < x0 + w) {
+      const on = roomFocus === d.key, filled = d.style || d.spots.some(sp => S.room.put[sp]), down = pressedIn(cx, y, cw, ch) ? 3 : 0;
+      rr(cx, y + 4, cw, ch, ch / 2); ctx.fillStyle = "rgba(20, 28, 90, 0.12)"; ctx.fill();
+      rr(cx, y + down, cw, ch, ch / 2); ctx.fillStyle = on ? "#FFF0B3" : "#FFFFFF"; ctx.fill();
+      if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 2.6; ctx.stroke(); }
+      else if (!filled) { ctx.setLineDash([5, 4]); ctx.strokeStyle = "#8FA0D8"; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }   // empty: dashed, like its shape in the room
+      else { ctx.strokeStyle = "#E9D3B0"; ctx.lineWidth = 2; ctx.stroke(); }
+      label(chipName(d), cx + cw / 2, y + ch / 2 + 1 + down, 13, INK, 800);
+      const l = Math.max(x0, cx), r = Math.min(x0 + w, cx + cw);
+      if (r - l > 6) buttons.push({ x: l, y, w: r - l, h: ch + 4, onTap: () => openPicker(d.spots[0]) });
+    }
+    cx += cw + gap;
+  });
+  ctx.restore();
+  rowArrows("decor", x0, y, w, ch, Math.max(80, w - 80));
+  pillButton(W - 12 - doneW, y - 1, doneW, 46, t("done"), () => { decorating = false; roomFocus = null; roomTry = null; }, true);
 }
 
-/* ---------- the picker for one spot, a pair of spots, or the Style ---------- */
+/* ---------- the picker: a small sheet at the bottom, for one spot or for the Style ---------- */
 // Any spot can be asked for: a wall, floor or window view opens its room's Style picker.
-function openPicker(spot) { overlay = { kind: "roompick", spot, t: 1, delay: 0, at: time }; }
+function openPicker(spot) {
+  decorating = true; roomFocus = decorOf(spot).key; roomTry = null; rowScroll.pick = -1;     // -1: slide to the one in use
+  overlay = { kind: "roompick", spot, t: 1, delay: 0, at: time };
+}
+function closePicker() { overlay = null; roomTry = null; roomFocus = null; }
 function placeThing(spot, id) {
   if (id) S.room.put[spot] = id; else delete S.room.put[spot];
+  roomTry = null;
   save();
-  overlay = null;
   roomPop = { spot, t: time };
   sfx.place();
 }
+// A tile. Hers, or None: it goes in at once. Not hers yet: the first tap shows it in the room, the
+// second asks "Buy?" (the picker stays open behind that card).
 function pickThing(spot, id) {
   if (!id || roomOwns(id)) { placeThing(spot, id); return; }
+  if (!roomTry || roomTry.spot !== spot || roomTry.id !== id) { roomTry = { spot, id }; roomPop = { spot, t: time }; sfx.peek(); return; }
   const it = roomItem(id), name = t("ri_" + id);
   askBuy({ name, price: it.price, pic: ["room", id] }, () => {
     if (!S.room.own.includes(id)) S.room.own.push(id);
     placeThing(spot, id);
   });
 }
-// Put a style's pieces in the room. Not hers yet: the "Buy?" card first, for the pieces she lacks.
+// Put a style's pieces in the room. Not hers yet: shown first, then the "Buy?" card for the pieces she lacks.
 function useStyle(st) {
   const R = styleRoom(st);
   R.pieces.forEach((sp, i) => { S.room.put[sp] = st.put[i]; });
+  roomTry = null;
   save();
-  overlay = null;
   sfx.place();
 }
 function pickStyle(st) {
   if (styleOwned(st)) { useStyle(st); return; }
+  if (!roomTry || roomTry.style !== st.id) { roomTry = { style: st.id }; sfx.peek(); return; }
   askBuy({ name: t("style_of", t("st_" + st.id)), price: styleCost(st), pic: ["style", st.id] }, () => {
     for (const id of st.put) if (roomItem(id).price > 0 && !S.room.own.includes(id)) S.room.own.push(id);
     useStyle(st);
   });
 }
-function drawRoomPick() {
-  const o = overlay, d = decorOf(o.spot), R = ROOMS[roomOfSpot(o.spot)];
-  buttons = [];                                                         // nothing behind the card can be tapped
-  ctx.fillStyle = "rgba(20, 26, 80, 0.5)"; ctx.fillRect(0, 0, W, H);
-  // one section of tiles for each spot (a pair has a small title over each), or the styles
-  const now = d.style ? styleNow(R) : null;
-  const sections = d.style ? [{ spot: "", title: "", ids: R.styles.map(st => st.id) }]
-    : d.spots.map(sp => ({ spot: sp, title: d.spots.length > 1 ? t("rs_" + sp) : "", ids: [""].concat(ROOM_ITEMS.filter(it => it.spot === sp).map(it => it.id)) }));
-  const cw = Math.max(220, Math.min(340, W - 32)), colsN = d.spots.length > 1 && !d.style ? 4 : 3, gap = 8;
-  const rowsOf = sec => Math.ceil(sec.ids.length / colsN), rowsN = sections.reduce((n, sec) => n + rowsOf(sec), 0);
-  const heads = sections.filter(sec => sec.title).length * 22 + (d.style && !now ? 20 : 0);
-  const roomForTiles = H - topY - 12 - 66 - 74 - heads - (rowsN - 1) * gap;     // title above, Done below
-  const tw = Math.max(44, Math.min((cw - 32 - gap * (colsN - 1)) / colsN, roomForTiles / rowsN));
-  const ch = 66 + heads + rowsN * tw + (rowsN - 1) * gap + 74;
-  const x = (W - cw) / 2, y = Math.max(topY + 4, (H - ch) / 2);
-  card(x, y, cw, ch);
-  fitLabel(d.style ? t("style") : d.spots.length > 1 ? t("rg_" + d.key) : t("rs_" + d.spots[0]), W / 2, y + 36, 22, cw - 36, INK, 900);
-  const gw = colsN * tw + (colsN - 1) * gap, gx0 = (W - gw) / 2;
-  let ty0 = y + 62;
-  if (d.style && !now) { fitLabel(t("style_mix"), W / 2, ty0 + 4, 12, cw - 36, SOFT, 700); ty0 += 20; }   // her old pieces don't make a style
-  for (const sec of sections) {
-    if (sec.title) { label(sec.title, gx0 + 2, ty0 + 8, 13, SOFT, 800, "left"); ty0 += 22; }
-    const cur = sec.spot ? S.room.put[sec.spot] || "" : now ? now.id : null;
-    sec.ids.forEach((id, i) => {
-      const tx = gx0 + (i % colsN) * (tw + gap), ty = ty0 + Math.floor(i / colsN) * (tw + gap);
-      const st = d.style ? styleById(id) : null, on = id === cur;
-      const owned = st ? styleOwned(st) : !id || roomOwns(id);
-      rr(tx, ty, tw, tw, 14); ctx.fillStyle = on ? "#FFF0B3" : "#F1F5FF"; ctx.fill();
-      if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
-      if (st) drawStyleSwatch(st, tx + tw / 2, ty + tw * 0.42, tw * 0.62);
-      else if (id) drawThingPreview(sec.spot, id, tx + tw / 2, ty + tw * 0.42, tw * 0.62);
-      else label(t("no_hat"), tx + tw / 2, ty + tw * 0.42, Math.round(Math.max(11, tw * 0.17)), SOFT, 800);
-      const ly = ty + tw - 11;
-      if (owned) fitLabel(st ? t("st_" + id) : id ? t("ri_" + id) : t("room_none"), tx + tw / 2, ly, 11, tw - 8, INK, 700);
-      else {                                                            // not hers yet: the price (a style: the pieces she lacks)
-        const num = String(st ? styleCost(st) : roomItem(id).price);
-        ctx.font = `800 12px ${FONT}`;
-        const left = tx + tw / 2 - (ctx.measureText(num).width + 16) / 2;
-        drawCoin(left + 6, ly - 1, 6.5);
-        label(num, left + 16, ly, 12, INK, 800, "left");
-      }
-      buttons.push({ x: tx, y: ty, w: tw, h: tw, onTap: () => (st ? pickStyle(st) : pickThing(sec.spot, id)) });
-    });
-    ty0 += rowsOf(sec) * (tw + gap);
+// A name in up to two lines that fit "maxW" at 12px.
+function twoLines(text, maxW) {
+  ctx.font = `700 12px ${FONT}`;
+  if (ctx.measureText(text).width <= maxW) return [text];
+  const words = text.split(" ");
+  for (let n = words.length - 1; n > 0; n--) {
+    const a = words.slice(0, n).join(" ");
+    if (ctx.measureText(a).width <= maxW) return [a, words.slice(n).join(" ")];
   }
-  pillButton(x + 24, y + ch - 62, cw - 48, 46, t("done"), () => { overlay = null; }, true);
+  return [text];
+}
+function drawRoomPick() {
+  const o = overlay, d = decorOf(o.spot), R = ROOMS[roomOfSpot(o.spot)], spot = d.style ? "" : d.spots[0];
+  const { tw, th, h } = sheetSize(), y = H - h;
+  // The room above stays live: tapping another spot there opens that one. Nothing else behind can be tapped.
+  buttons = buttons.filter(b => b.spotTap && b.y < y - 8);
+  for (const b of buttons) b.h = Math.min(b.h, y - 8 - b.y);
+  rr(0, y - 5, W, h + 40, 26); ctx.fillStyle = "rgba(20, 28, 90, 0.16)"; ctx.fill();
+  rr(0, y, W, h + 40, 26); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+  const now = d.style ? styleNow(R) : null, doneW = 88;
+  const trying = !!roomTry && (d.style ? !!roomTry.style : roomTry.spot === spot);
+  const textW = W - 20 - doneW - 26;
+  leftLabel(d.style ? t("style") : t("rs_" + spot), 20, y + 25, 20, textW, INK);
+  const tip = trying ? t("try_buy") : d.style && !now ? t("style_mix") : t("try_tip");
+  label(tip, 20, y + 49, 12, trying ? "#9C3A00" : SOFT, 800, "left");
+  pillButton(W - 16 - doneW, y + 14, doneW, 42, t("done"), closePicker, true);
+  // the tiles, in a row that slides when there are more than fit
+  const ids = d.style ? R.styles.map(q => q.id) : [""].concat(ROOM_ITEMS.filter(it => it.spot === spot).map(it => it.id));
+  const gap = 8, x0 = 12, w = Math.max(60, W - 24), ty = y + 64, total = ids.length * (tw + gap) - gap, max = Math.max(0, total - w);
+  const cur = d.style ? (now ? now.id : null) : S.room.put[spot] || "";
+  if (rowScroll.pick < 0) rowScroll.pick = Math.max(0, ids.indexOf(cur)) * (tw + gap) + tw / 2 - w / 2;   // the one in use shows
+  rowScroll.pick = Math.max(0, Math.min(max, rowScroll.pick || 0));
+  myRows.pick = { x: x0, y: ty, w, h: th, max };
+  const left = max > 0 ? x0 - rowScroll.pick : x0 + (w - total) / 2;
+  ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, ty - 4, w + 4, th + 10); ctx.clip();
+  ids.forEach((id, i) => {
+    const tx = left + i * (tw + gap);
+    if (tx + tw < x0 || tx > x0 + w) return;
+    const st = d.style ? styleById(id) : null, on = id === cur;
+    const tried = !!roomTry && (st ? roomTry.style === id : roomTry.spot === spot && roomTry.id === id);
+    const owned = st ? styleOwned(st) : !id || roomOwns(id), down = pressedIn(tx, ty, tw, th) ? 2 : 0, top = ty + down;
+    rr(tx, top, tw, th, 16); ctx.fillStyle = on ? "#FFF0B3" : tried ? "#FFF7DE" : "#F1F5FF"; ctx.fill();
+    if (on) { ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 3; ctx.stroke(); }
+    else if (tried) { ctx.setLineDash([6, 4]); ctx.strokeStyle = "#FF8A1F"; ctx.lineWidth = 2.6; ctx.stroke(); ctx.setLineDash([]); }
+    const py = top + th * 0.3, ps = Math.min(tw * 0.62, th * 0.46);
+    if (st) drawStyleSwatch(st, tx + tw / 2, py, ps);
+    else if (id) drawThingPreview(spot, id, tx + tw / 2, py, ps);
+    else { oval(tx + tw / 2, py, ps * 0.36, ps * 0.36); ctx.setLineDash([5, 4]); ctx.strokeStyle = "#8FA0D8"; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
+    // its name (two lines at most), and the price while it is not hers
+    const lines = twoLines(st ? t("st_" + id) : id ? t("ri_" + id) : t("no_hat"), tw - 10);
+    const ny = top + th * 0.62 + (lines.length > 1 || !owned ? 0 : 6);
+    lines.forEach((ln, j) => label(ln, tx + tw / 2, ny + j * 13, 12, INK, 700));
+    if (!owned) {
+      const num = String(st ? styleCost(st) : roomItem(id).price);
+      ctx.font = `800 12px ${FONT}`;
+      const lx = tx + tw / 2 - (ctx.measureText(num).width + 16) / 2, ly = top + th - 13;
+      drawCoin(lx + 6, ly - 1, 6.5);
+      label(num, lx + 16, ly, 12, INK, 800, "left");
+    }
+    const l = Math.max(x0, tx), r = Math.min(x0 + w, tx + tw);
+    if (r - l > 6) buttons.push({ x: l, y: ty, w: r - l, h: th, onTap: () => (st ? pickStyle(st) : pickThing(spot, id)) });
+  });
+  ctx.restore();
+  rowArrows("pick", x0, ty, w, th, Math.max(tw + gap, w - tw - gap));
   if (time - o.at < 0.25) buttons = [];                                 // the tap that opened it can't also choose
 }
 

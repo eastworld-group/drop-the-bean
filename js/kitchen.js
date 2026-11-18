@@ -24,19 +24,22 @@ Object.assign(WORDS.en, {
 });
 
 const KWALL_Y = 280;
+// Tall things along the wall (the fridge, the counter under the window, the stove under the pans), a
+// mat in front of the counter, the table in the middle, the cat bowls at the front. The front left
+// corner stays free for her cat while she decorates.
 Object.assign(SPOT_AT, {
   kwall:    { x: 0, y: 0, box: [0, 0, RW, KWALL_Y], layer: 0 },
   kfloor:   { x: 0, y: KWALL_Y, box: [0, 0, RW, RH - KWALL_Y], layer: 0 },
   kview:    { x: 196, y: 108, box: [-56, -50, 112, 100], layer: 0 },
   kclock:   { x: 112, y: 56, box: [-24, -24, 48, 48], layer: 1 },
   kshelf:   { x: 312, y: 92, box: [-46, -44, 92, 50], layer: 1 },
-  kpans:    { x: 312, y: 122, box: [-44, -4, 88, 66], layer: 1 },
+  kpans:    { x: 312, y: 122, box: [-44, -4, 88, 64], layer: 1 },
   kfridge:  { x: 52, y: 300, box: [-40, -192, 80, 196], layer: 2, depth: 300 },
-  kcounter: { x: 196, y: 300, box: [-72, -92, 144, 96], layer: 2, depth: 300 },
-  kstove:   { x: 312, y: 300, box: [-42, -92, 84, 96], layer: 2, depth: 300 },
-  ktable:   { x: 140, y: 404, box: [-64, -66, 128, 70], layer: 2, depth: 404 },
-  krug:     { x: 196, y: 400, box: [-104, -26, 208, 52], layer: 2, depth: 0 },
-  kbowl:    { x: 306, y: 432, box: [-32, -26, 64, 30], layer: 2, depth: 432 },
+  kcounter: { x: 196, y: 300, box: [-76, -116, 152, 120], layer: 2, depth: 300 },
+  kstove:   { x: 312, y: 300, box: [-44, -108, 88, 112], layer: 2, depth: 300 },
+  krug:     { x: 196, y: 328, box: [-104, -24, 208, 48], layer: 2, depth: 0, lab: [0, 0] },
+  ktable:   { x: 172, y: 420, box: [-64, -80, 128, 84], layer: 2, depth: 420, lab: [0, -30] },
+  kbowl:    { x: 306, y: 434, box: [-34, -28, 68, 32], layer: 2, depth: 434, lab: [0, -40] },
 });
 Object.assign(SWATCH, { kwall: 1, kfloor: 1, kview: 1 });
 WINDOW_SPOTS.kview = 1;
@@ -102,14 +105,14 @@ Object.assign(PATTERNS, {
 
 /* ---------- the fixed parts: wall, floor, window with a little curtain, sill, shelf board ---------- */
 function drawKitchenBase() {
-  PATTERNS[roomPut("kwall")](0, 0, RW, KWALL_Y);
-  PATTERNS[roomPut("kfloor")](0, KWALL_Y, RW, RH - KWALL_Y);
+  PATTERNS[roomShow("kwall")](0, 0, RW, KWALL_Y);
+  PATTERNS[roomShow("kfloor")](0, KWALL_Y, RW, RH - KWALL_Y);
   const g = ctx.createLinearGradient(0, KWALL_Y, 0, KWALL_Y + 26);
   g.addColorStop(0, "rgba(60, 40, 30, 0.22)"); g.addColorStop(1, "rgba(60, 40, 30, 0)");
   ctx.fillStyle = g; ctx.fillRect(0, KWALL_Y, RW, 26);
   rr(-4, KWALL_Y - 10, RW + 8, 12, 3); fs("#FFFFFF", "#C9B8A6", 2.4);
   const v = SPOT_AT.kview;
-  drawWindow(roomPut("kview"), v.x - 46, v.y - 40, 92, 80);
+  drawWindow(roomShow("kview"), v.x - 46, v.y - 40, 92, 80);
   line([[v.x - 58, v.y - 50], [v.x + 58, v.y - 50]], "#8A5A2E", 4);                    // a rod with a short curtain
   ctx.beginPath(); ctx.moveTo(v.x - 56, v.y - 50);
   for (let i = 0; i <= 8; i++) ctx.quadraticCurveTo(v.x - 56 + i * 14 - 7, v.y - 26, v.x - 56 + i * 14, v.y - 32);
@@ -130,4 +133,29 @@ ROOMS.push({ id: "kitchen", spots: KITCHEN_SPOTS, wallY: KWALL_Y, base: drawKitc
     { id: "k_lemon", put: ["kw_lemon", "kf_check", "kv_sunset"] },   // 900 + 1100 + 1200 = 3200
     { id: "k_brick", put: ["kw_brick", "kf_terra", "kv_snow"] },     // 3200 + 2400 + 3000 = 8600
   ],
-  decor: ["kclock", "kshelf", "kpans", "kfridge", "kcounter", "kstove", "ktable", "krug", "kbowl"] });
+  decor: ["kfridge", "kcounter", "kstove", "ktable", "krug", "kshelf", "kpans", "kclock", "kbowl"] });
+
+// The faint shapes of the empty spots while decorating (see GHOSTS in js/room.js).
+Object.assign(GHOSTS, {
+  kclock: () => { oval(0, 0, 20, 20); gfs(); gline([[0, 0], [0, -12]]); gline([[0, 0], [8, 4]]); },
+  kshelf: () => { for (const [x, w, h] of [[-26, 20, 28], [0, 22, 36], [26, 18, 24]]) { rr(x - w / 2, -h, w, h, 5); gfs(); rr(x - w / 2 - 2, -h - 6, w + 4, 7, 3); gfs(false); } },
+  kpans: () => {
+    gline([[-42, 0], [42, 0]]);
+    for (const [x, r] of [[-26, 13], [2, 16], [30, 11]]) { gline([[x, 0], [x, 28]]); oval(x, 28 + r, r, r); gfs(); }
+  },
+  kfridge: () => {
+    rr(-36, -188, 72, 188, 8); gfs(); gline([[-34, -120], [34, -120]]);
+    for (const [y0, y1] of [[-176, -132], [-108, -40]]) { rr(22, y0, 6, y1 - y0, 3); gfs(false); }
+  },
+  kcounter: () => {
+    rr(-70, -80, 140, 80, 4); gfs(); rr(-74, -90, 148, 12, 4); gfs();
+    for (const x of [-66, -22, 22]) { rr(x + 3, -70, 38, 60, 4); gfs(false); }
+  },
+  kstove: () => {
+    rr(-40, -80, 80, 80, 6); gfs(); rr(-42, -90, 84, 10, 3); gfs(); rr(-30, -54, 60, 44, 5); gfs(false);
+    for (const x of [-20, 20]) { oval(x, -92, 13, 3.5); gfs(false); }
+  },
+  ktable: () => { for (const x of [-48, 44]) { rr(x, -56, 6, 56, 2); gfs(); } rr(-60, -64, 120, 12, 5); gfs(); },
+  krug: () => { rr(-96, -20, 192, 40, 18); gfs(); rr(-80, -12, 160, 24, 12); gfs(false); },
+  kbowl: () => { ctx.save(); ctx.translate(-13, 0); gbowl(13); ctx.restore(); ctx.save(); ctx.translate(15, 0); gbowl(13); ctx.restore(); },
+});
