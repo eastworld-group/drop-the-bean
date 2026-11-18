@@ -553,8 +553,9 @@ function twinkle(x, y, r) {
   ctx.closePath(); ctx.fill();
 }
 // Only the player's own cat is dressed up.
-const hatFor = key => (key === S.hero ? S.hat : "");
-const neckFor = key => (key === S.hero ? S.neck : "");
+// The outfit she picks in My cat is worn by every cat in the game, not only her own.
+const hatFor = key => S.hat;
+const neckFor = key => S.neck;
 
 /* ---------- a cat hiding under a blanket ---------- */
 function drawBlanket(cx, cy, s, seed) {

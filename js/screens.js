@@ -222,7 +222,7 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
     return;
   }
   if (isNext && !stars) drawCat(x + s / 2, y + s * 0.5, s * 0.66, S.hero, { seed: 2, wake: 1, hat: S.hat, neck: S.neck, noShadow: true });
-  else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true });
+  else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true, hat: S.hat, neck: S.neck });
   // number tag
   const tw = s * (text.length > 2 ? 0.5 : text.length > 1 ? 0.42 : 0.34), th = s * 0.3;
   rr(x - 2, y - 2, tw, th, th / 2); ctx.fillStyle = rim; ctx.fill();
