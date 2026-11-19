@@ -782,7 +782,7 @@ let pet = null, roomFx = [], strokeAt = null;
 function newPet() {
   return { spot: 0, x: PET_SPOTS[0], fy: PET_FEET, k: 1, face: 1, pose: "sit", wake: 1, move: null, aside: false, asideRoom: -1,
     until: time + 18 + Math.random() * 14, blinkAt: time + 2 + Math.random() * 2, swishAt: time + 3 + Math.random() * 4,
-    perk: -9, happy: -9, purrAt: -9, rub: 0 };
+    perk: -9, happy: -9, purrAt: -9, meowAt: -9, tapT: -9, rub: 0 };
 }
 // The part of the room she covers, in room units, standing on x, feet at size k (her tail is left out:
 // it curls toward the room's edge).
@@ -866,13 +866,26 @@ function hearts(n) {
   const s = PET_S * pet.k;
   for (let i = 0; i < n; i++) roomFx.push({ x: pet.x + (i - (n - 1) / 2) * 22 * pet.k, y: pet.fy - s * 0.86, vx: (i - (n - 1) / 2) * 14, vy: S.calm ? 0 : -34 - i * 6, life: 1.1, max: 1.1 });
 }
-// Tapping her: she wakes up or looks up, meows in her own voice, and purrs.
+// Tapping her: she wakes up or looks up, gives a little squash and hop, squints happily, swishes
+// her tail, meows in her own voice and purrs (a soft rumble shows around her while she purrs).
+// Quick taps in a row keep her happy without piling up meows and purrs.
+const TAP_HOP = 0.6, PURR_SHOW = 1.6;
 function petCat() {
   if (!pet) return;
-  pet.perk = time + 3; pet.pose = "sit"; pet.until = Math.max(pet.until, time + 12);
-  meow(0.05, VOICE[S.hero]);
-  sfx.purr();
+  const p = pet;
+  p.perk = time + 3; p.pose = "sit"; p.until = Math.max(p.until, time + 12);
+  p.tapT = time; p.happy = time + 1.8; p.swishAt = time;
+  if (time > p.meowAt) { p.meowAt = time + 1.4; meow(0.05, VOICE[S.hero]); }
+  if (time > p.purrAt) { p.purrAt = time + 1.3; sfx.purr(); }
   hearts(3);
+}
+// Her shape a moment after a tap: squash down, hop up a little stretched, land with a small squash.
+// Returns [width, height, lift as a part of her size].
+function tapShape(t) {
+  if (S.calm || t < 0 || t > TAP_HOP) return [1, 1, 0];
+  if (t < 0.1) { const f = Math.sin(t / 0.1 * Math.PI / 2); return [1 + 0.07 * f, 1 - 0.09 * f, 0]; }
+  if (t < 0.45) { const f = (t - 0.1) / 0.35, up = Math.sin(f * Math.PI); return [lerp(1.07, 1, f) - 0.03 * up, lerp(0.91, 1, f) + 0.05 * up, up * 0.07]; }
+  const f = Math.sin((t - 0.45) / 0.15 * Math.PI); return [1 + 0.04 * f, 1 - 0.05 * f, 0];
 }
 // A finger stroking across her (main.js sends every move on the room screen): a happy squint and a purr.
 function roomStroke(x, y) {
@@ -883,7 +896,7 @@ function roomStroke(x, y) {
   strokeAt = [x, y];
   if (pet.rub < 50) return;
   pet.rub = 0; pet.happy = time + 1.6; pet.perk = Math.max(pet.perk, time + 2);
-  if (time > pet.purrAt) { pet.purrAt = time + 2.6; sfx.purr(); hearts(1); }
+  if (time > pet.purrAt) { pet.purrAt = time + 2.6; pet.purred = time; sfx.purr(); hearts(1); }
 }
 
 /* ---------- the daily cat gift ----------
@@ -926,7 +939,7 @@ function openGift() {
   homeCat.squishT = time;                                       // her cat on the home screen gives a little happy squish
   overlay = { kind: "gift", t: 0, delay: 0, at: time, day, key, got };
 }
-const roomBusy = () => !!pet && (!!pet.move || Math.abs(pet.wake - petTarget()) > 0.02) || roomFx.length > 0 || (decorating && !!roomFocus && !S.calm) || roomFit !== (decorating ? 1 : 0);
+const roomBusy = () => !!pet && (!!pet.move || Math.abs(pet.wake - petTarget()) > 0.02 || time - Math.max(pet.tapT, pet.purred || -9) < PURR_SHOW) || roomFx.length > 0 || (decorating && !!roomFocus && !S.calm) || roomFit !== (decorating ? 1 : 0);
 
 /* ---------- the room screen ---------- */
 // A small wrapped present, standing on x, y (in whatever units are in use). Day 7's is golden.
@@ -1028,8 +1041,19 @@ function drawRoomScreen() {
   const bt = time - p.blinkAt, blink = bt >= 0 && bt < 0.18 ? Math.sin(bt / 0.18 * Math.PI) : 0;
   const st = time - p.swishAt, wag = S.calm || st < 0 || st > 1.5 ? 0 : Math.sin(st * 6) * 0.13 * Math.sin(st / 1.5 * Math.PI);
   const bob = p.move && !S.calm ? Math.abs(Math.sin(p.move.t * 7)) * 5 * p.k : 0;
-  drawCat(p.x, p.fy - s * 0.37 - bob, s, S.hero, { seed: 1.3, wake: p.wake, hat: S.hat, neck: S.neck, still: true,
-    sx: -p.face, sy: 1, breath: S.calm ? 0 : 1, blink, wag, happy: time < p.happy });
+  const [qx, qy, lift] = tapShape(time - p.tapT);              // a tap: squash, hop, land (her paws stay put)
+  const purring = time - Math.max(p.tapT, p.purred || -9);     // a soft rumble while she purrs
+  const rumble = !S.calm && purring >= 0 && purring < PURR_SHOW ? Math.sin(time * 70) * 0.7 * (1 - purring / PURR_SHOW) : 0;
+  drawCat(p.x + rumble, p.fy - s * 0.37 * qy - bob - lift * s, s, S.hero, { seed: 1.3, wake: p.wake, hat: S.hat, neck: S.neck, still: true,
+    sx: -p.face * qx, sy: qy, breath: S.calm ? 0 : 1, blink, wag, happy: time < p.happy });
+  if (purring >= 0 && purring < PURR_SHOW && p.wake > 0.5) {  // little purr lines at her sides
+    const a = Math.sin(clamp01(purring / PURR_SHOW) * Math.PI) * 0.55, cy = p.fy - s * 0.42;
+    ctx.strokeStyle = `rgba(255, 92, 138, ${a})`; ctx.lineWidth = 3; ctx.lineCap = "round";
+    for (const d of [-1, 1]) for (let i = 0; i < 2; i++) {
+      const r = s * (0.34 + i * 0.07) + (S.calm ? 0 : (purring * 18) % 8);
+      ctx.beginPath(); ctx.arc(p.x, cy, r, d > 0 ? -0.35 : Math.PI - 0.35, d > 0 ? 0.35 : Math.PI + 0.35); ctx.stroke();
+    }
+  }
   if (p.wake < 0.5 && !S.calm) {                              // little z's while she naps
     const zt = (time * 0.45) % 1;
     ctx.globalAlpha = Math.sin(zt * Math.PI) * 0.8;

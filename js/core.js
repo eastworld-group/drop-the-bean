@@ -283,7 +283,7 @@ function lookFor(n) {
 /* ---------- saved on this device ---------- */
 const SAVE_KEY = "dropthebean.save.v2";
 function freshSave() {
-  return { stars: {}, coins: 60, pu: { hint: 3, snooze: 2, treat: 1, hammer: 0 }, hammerGot: false, perfect: {}, hero: "k", cats: [], names: {}, hat: "", hats: [],
+  return { stars: {}, coins: 60, pu: { hint: 3, snooze: 2, treat: 1, hammer: 0 }, hammerGot: false, perfect: {}, hero: "k", cats: [], names: {}, hat: "", hats: [], wear: {},
     neck: "", necks: [], sound: true, music: true, track: 0, meow: 0, timer: true, shapes: false, calm: false,
     daily: { last: "", streak: 0 }, setup: false, player: "", room: { own: [], put: {} }, roomView: 0,
     // notes: chapters whose love note she has read. chests: chapters whose treasure she opened.
@@ -306,6 +306,16 @@ const starSum = sv => Object.values(sv.stars).reduce((a, b) => a + b, 0);
 // "cats" lists cats that stay hers whatever her star count: the cat she already had
 // as her own before cats needed stars is never taken away.
 function keepHero(sv) { if (CAT_STARS[sv.hero] > starSum(sv) && !sv.cats.includes(sv.hero)) sv.cats.push(sv.hero); }
+// Each cat's own outfit, { cat: [hat, neck] }: only cats she can choose and things she owns.
+function cleanWear(w, s) {
+  const out = {};
+  if (w && typeof w === "object") for (const k of Object.keys(w)) {
+    if (!HEROES.includes(k) || !Array.isArray(w[k])) continue;
+    const hat = s.hats.includes(w[k][0]) ? w[k][0] : "", neck = s.necks.includes(w[k][1]) ? w[k][1] : "";
+    if (hat || neck) out[k] = [hat, neck];
+  }
+  return out;
+}
 function loadSave() {
   const base = freshSave();
   try {
@@ -335,6 +345,7 @@ function loadSave() {
   for (const k of ["cats", "hats", "necks"]) if (!Array.isArray(base[k])) base[k] = [];
   for (const k of ["stars", "perfect"]) if (!base[k] || typeof base[k] !== "object") base[k] = {};
   if (!base.names || typeof base.names !== "object") base.names = {};
+  base.wear = cleanWear(base.wear, base);             // saves from before each cat had her own outfit: the others wear nothing
   for (const p of POWERUPS) base.pu[p.id] = Math.max(0, Math.floor(Number(base.pu[p.id]) || 0));
   base.hammerGot = !!base.hammerGot;
   if (!HEROES.includes(base.hero)) base.hero = "k";
@@ -377,7 +388,7 @@ function makeCode() {
   const perfect = new Uint8Array(Math.ceil(np / 8));                 // one bit per level: solved in the fewest slides
   for (let i = 0; i < np; i++) if (S.perfect[i]) perfect[i >> 3] |= 1 << (i & 7);
   const data = { v: 1, p: S.player || "", s: b64(stars), pf: b64(perfect), c: S.coins, u: [S.pu.hint, S.pu.snooze, S.pu.treat, S.pu.hammer || 0], hg: S.hammerGot ? 1 : 0,
-    h: S.hero, ck: S.cats, n: S.names, t: S.hat, o: S.hats, nk: S.neck, ns: S.necks, d: [S.daily.last, S.daily.streak],
+    h: S.hero, ck: S.cats, n: S.names, t: S.hat, o: S.hats, nk: S.neck, ns: S.necks, w: S.wear, d: [S.daily.last, S.daily.streak],
     x: [S.sound ? 1 : 0, S.music ? 1 : 0, S.track, S.meow || 0, S.timer ? 1 : 0, S.shapes ? 1 : 0, S.calm ? 1 : 0] };
   // the room: one bit per thing she owns (by its fixed number), then what stands in each spot (-1: nothing)
   const own = new Uint8Array(Math.ceil(ROOM_ITEMS.length / 8));
@@ -448,6 +459,7 @@ function readCode(text) {
   out.hat = out.hats.includes(d.t) ? d.t : "";
   out.necks = known(d.ns, id => NECKS.some(q => q.id === id));
   out.neck = out.necks.includes(d.nk) ? d.nk : "";
+  out.wear = cleanWear(d.w, out);                     // older codes have no "w": the other cats wear nothing
   if (Array.isArray(d.d)) out.daily = { last: String(d.d[0] || ""), streak: count(d.d[1], 9999) };
   const x = Array.isArray(d.x) ? d.x : [1, 1, 0, 0, 1, 0, 0];
   out.sound = !!x[0]; out.music = !!x[1]; out.track = count(x[2], TRACK_FILES.length - 1);

@@ -230,7 +230,7 @@ function levelBed(x, y, s, n, stars, isNext, pressed) {
     return;
   }
   if (isNext && !stars) drawCat(x + s / 2, y + s * 0.5, s * 0.66, S.hero, { seed: 2, wake: 1, hat: S.hat, neck: S.neck, noShadow: true });
-  else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true, hat: S.hat, neck: S.neck });
+  else drawCat(x + s / 2, y + s * 0.44, s * 0.64, skin(CAST[(n * 3 + 1) % CAST.length]), { seed: n, noShadow: true, hat: hatFor(skin(CAST[(n * 3 + 1) % CAST.length])), neck: neckFor(skin(CAST[(n * 3 + 1) % CAST.length])) });
   // number tag
   const tw = s * (text.length > 2 ? 0.5 : text.length > 1 ? 0.42 : 0.34), th = s * 0.3;
   rr(x - 2, y - 2, tw, th, th / 2); ctx.fillStyle = rim; ctx.fill();
@@ -306,7 +306,10 @@ function dragRow(x) {
 }
 function pickCat(k) {
   if (!catOpen(k)) { toast(t("cat_locked", CATS[k].name, CAT_STARS[k])); sfx.no(); return; }     // not enough stars yet
-  S.hero = k; save();
+  // each cat keeps her own outfit: put away the one this cat wears, dress the new one in hers
+  if (S.hat || S.neck) S.wear[S.hero] = [S.hat, S.neck]; else delete S.wear[S.hero];
+  tryOn = null;
+  S.hero = k; [S.hat, S.neck] = S.wear[k] || ["", ""]; delete S.wear[k]; save();
   nameInput.value = S.names[k] || "";
   nameInput.placeholder = CATS[k].name;
   sfx.meow(0, VOICE[k]);

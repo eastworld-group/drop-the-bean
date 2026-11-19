@@ -861,6 +861,7 @@
       if (s.pu.hint !== 4 || s.pu.snooze !== 3 || s.pu.treat !== 2) wrong.push("powerups");
       if (s.hero !== "o" || (s.names || {}).o !== "Kahel") wrong.push("cat and name");
       if (s.hat !== "bow" || String(s.hats) !== "bow,cap") wrong.push("hats");
+      if (JSON.stringify(s.wear) !== "{}") wrong.push("other cats should wear nothing");
       if (s.player !== "Liza") wrong.push("player name");
       if (s.daily.last !== "2026-01-02" || s.daily.streak !== 5) wrong.push("daily streak");
       if (s.track !== 3 || s.meow !== 1 || !s.timer || s.shapes || !s.calm) wrong.push("settings");
@@ -868,6 +869,21 @@
       if (wrong.length) why = "restored, but these came back wrong: " + wrong.join(", ");
     }
     record("codes", "An old-format code (v, p, s, c, u, h, n, t, o, th, d, x only) restores", why);
+
+    // Each cat keeps her own outfit: Bean in the beanie, Meowsy in a bow, through a backup code.
+    let own = null;
+    why = attempt(g, () => {
+      const c = Object.assign({}, old, { h: "k", t: "bow", o: ["bow", "cap"], w: { g: ["cap", ""], zz: ["bow", ""], o: ["crown", ""] } });
+      const bd = b64(new TextEncoder().encode(JSON.stringify(c)));
+      const r = g.lib.restore("BEAN-" + bd + "-" + sum(bd));
+      if (!r) return "the game turned the code away";
+      own = JSON.parse(r).S;
+    });
+    if (!why) {
+      if (own.hat !== "bow") why = "her own cat lost her outfit";
+      else if (JSON.stringify(own.wear) !== JSON.stringify({ g: ["cap", ""] })) why = "the other cats' outfits came back as " + JSON.stringify(own.wear);
+    }
+    record("codes", "Each cat keeps her own outfit in a backup code", why);
   }
 
   // When this page is opened on the live site in a browser that has the game installed, the game's
